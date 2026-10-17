@@ -60,17 +60,17 @@ test("leave: only your own clone, a known venue, the phrasebook cleaned", async 
   assert.equal(s.store.docs.size, 1)
 })
 
-test("visiting: only the owner's buddies, only while the owner is away, never blocked", async (t) => {
+test("visiting: any player at the venue, only while the owner is away", async (t) => {
   const s = await start()
   t.after(s.close)
   await s.call("alice", "/leave", { venue: "loscab", clone: myClone() })
-  // Alice is signed off (not in "online"), Bob is her buddy
+  // Alice is signed off (not in "online"); Bob is her buddy, but anyone may visit
   let r = await s.call("bob", "/venue", { venue: "loscab" })
   assert.equal(r.body.clones.length, 1)
   assert.equal(r.body.clones[0].name, "Alice")
   assert.equal(r.body.clones[0].owner, "alice")
   assert.equal((await s.call("bob", "/venue", { venue: "smash" })).body.clones.length, 0, "only at its venue")
-  assert.equal((await s.call("carol", "/venue", { venue: "loscab" })).body.clones.length, 0, "not on her Buddy List: not shown")
+  assert.equal((await s.call("carol", "/venue", { venue: "loscab" })).body.clones.length, 1, "not on her Buddy List: still shown")
   // Alice signs on: her clone stands down
   s.live.add("alice")
   assert.equal((await s.call("bob", "/venue", { venue: "loscab" })).body.clones.length, 0)
@@ -88,7 +88,7 @@ test("a challenge result: logged (capped), the owner's push, the away card, seen
   await s.call("alice", "/leave", { venue: "loscab", clone: myClone() })
   assert.equal((await s.call("bob", "/result", { owner: "alice", cloneWon: true, score: [7, 11] })).status, 400, "score and winner must agree")
   assert.equal((await s.call("bob", "/result", { owner: "alice", cloneWon: false, score: [7, 7] })).status, 400)
-  assert.equal((await s.call("carol", "/result", { owner: "alice", cloneWon: false, score: [7, 11] })).status, 404, "a non-buddy can't play it")
+  assert.equal((await s.call("carol", "/result", { owner: "nobody", cloneWon: false, score: [7, 11] })).status, 404, "no such clone")
   let r = await s.call("bob", "/result", { owner: "alice", cloneWon: false, score: [7, 11] })
   assert.equal(r.status, 200)
   assert.equal(s.pushed.length, 1)

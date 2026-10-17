@@ -26,6 +26,7 @@ links here as `?mode=&venue=&place=`, read by `client/src/utils/deepLink.js`).
 - Server: `npm install && npm start` (PORT 8000). Without `MONGODB_URI` everything is kept in memory. `npm test`.
 - Client: `cd client && npm install && npm run dev` (set `VITE_SOCKET_URL` to the server, default http://localhost:8000). `npm test`, `npm run build`.
 
-## Open questions for the owner
-- Living Park clones and Live Broadcast were buddies-only in 98ish. With no buddies, clones are currently visible only to their owner and broadcasts are watched by link only. Decide who should see clones.
-- My Park "Together" activities (hold hands, date night, play with a pal) need a pal; nobody is a pal now, so they don't appear.
+## Owner decisions (Oct 2026)
+- Living Park clones: every player at the venue sees and can challenge a clone while its owner is away.
+- Live Broadcast: watched by link only.
+- My Park "Together" activities (hold hands, date night, play with a pal) stay off until online multiplayer is working; then bring them back.

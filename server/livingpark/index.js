@@ -1,12 +1,12 @@
 // Living Park (Pickleball 98's My Park): leave your Twin Clone at a venue's park while you're
-// away, and your buddies can challenge it there. It plays in your measured style (the clone
+// away, and anyone at that venue can challenge it there. It plays in your measured style (the clone
 // profile, twin/clone/profile.js) and says only lines from your own phrasebook. Results go
 // into its memory log, you get a push ("Your clone lost to Sam 7-11 at Los Cab"), and a
 // "while you were away" card when you come back. The rules: client/.../pickleball/park/living.js
 // (the same file the app uses).
 //
 // Consent: only your own clone ("self", the one you made of yourself) can be left, only by
-// you, and only your buddies (on your Buddy List, not blocked either way) see it, only while
+// you, and every player at that venue (owner's decision, Oct 2026) sees it, only while
 // you're signed off. Nothing here moves a real person's player: a clone only plays for its
 // absent owner.
 //
@@ -17,7 +17,7 @@
 //   /recall  {}                              take it back (its log goes too)
 //   /seen    {}                              the "while you were away" card was read
 //   /venue   { venue }                       -> { clones: [{ owner, name, clone, look, phrases }] }
-//                                               your buddies' clones there whose owners are away
+//                                               clones there whose owners are away
 //   /result  { owner, cloneWon, score: [clone, visitor] }  you played someone's clone
 //
 // Caps (MongoDB's free tier is 512 MB for everything): one record per account (~4-20 KB: the
@@ -66,7 +66,6 @@ const createLivingPark = ({ aim, store, push = null, now = Date.now, limits = {}
 
   const online = async (key) => !!(await getAim())?.sessions?.get(key)
   const userOf = async (key) => (await getAim())?.store?.find?.(key)
-  const buddiesOf = (user) => new Set((user?.groups || []).flatMap((g) => (g.buddies || []).map(keyOf)))
 
   // ---- yours ----
   const mine = async (me) => {
@@ -136,7 +135,6 @@ const createLivingPark = ({ aim, store, push = null, now = Date.now, limits = {}
       const owner = await userOf(rec.key)
       if (!owner) continue
       if ((owner.blocked || []).includes(me.key) || (me.blocked || []).includes(rec.key)) continue
-      if (!buddiesOf(owner).has(me.key)) continue // only their buddies
       out.push({ owner: rec.key, name: rec.name, clone: rec.clone, look: rec.look, phrases: rec.phrases })
       if (out.length >= 12) break
     }
@@ -161,7 +159,7 @@ const createLivingPark = ({ aim, store, push = null, now = Date.now, limits = {}
       const cur = await s.get(ownerKey)
       if (!cur) refuse(404, "That clone has gone home.")
       const ownerUser = await userOf(ownerKey)
-      if (!ownerUser || !buddiesOf(ownerUser).has(me.key) || (ownerUser.blocked || []).includes(me.key)) refuse(404, "That clone has gone home.")
+      if (!ownerUser || (ownerUser.blocked || []).includes(me.key)) refuse(404, "That clone has gone home.")
       const entry = { id: crypto.randomBytes(6).toString("hex"), at: now(), by: me.name, byKey: me.key, cloneWon: !!cloneWon, score: sc, venue: cur.venue }
       const next = { ...cur, log: r.addToLog(cur.log, entry), unseen: Math.min(r.LIMITS.log, (cur.unseen || 0) + 1), changedAt: now() }
       const saved = await s.put(next, cur.rev)

@@ -306,7 +306,7 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   }, [parkWorld, prefs.realSky, prefs.skyMode, prefs.tod])
   const [parkHud, setParkHud] = useState(null)
   const [parkUi, setParkUi] = useState({ menu: false, intro: false, turn: null, result: null })
-  // Living Park (park/living.js, utils/livingpark.js): buddies' clones left at this venue
+  // Living Park (park/living.js, utils/livingpark.js): other players' clones left at this venue
   // (owner -> { owner, name, clone, look, phrases }), your clone's panel, the away card
   const parkClonesRef = useRef(new Map())
   const [livingUi, setLivingUi] = useState({ panel: false, away: null })

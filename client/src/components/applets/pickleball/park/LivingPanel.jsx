@@ -5,7 +5,7 @@ import { listClones } from "../twin/clone/store.js"
 import { DEFAULT_PHRASES, LIMITS, PHRASE_KINDS, PHRASE_LABELS, cleanPhrases } from "./living.js"
 
 // Living Park (living.js, server/livingpark): leave your own clone at this venue while you're
-// away, edit the only lines it may say, and see who played it. Your buddies see it here
+// away, edit the only lines it may say, and see who played it. Every player at this venue sees it
 // while you're signed off; it plays the way your films say you play.
 
 const when = (t) => {
@@ -91,9 +91,9 @@ export const ClonePanel = ({ venueId, venueName, venueNames = {}, look, onClose 
             <p className="pkMuted">
               {rec
                 ? here
-                  ? `Your clone is here at ${venueName} while you're away. For now only you can see it: letting other players find and challenge clones is coming later.`
+                  ? `Your clone is here at ${venueName} while you're away. Anyone who comes to ${venueName} can find it and challenge it.`
                   : `Your clone is at ${venueNames[rec.venue] || rec.venue}. Leaving it here moves it.`
-                : `Leave your clone at ${venueName}: it waits here while you're away and plays the way your films say you play. For now only you can see it.`}
+                : `Leave your clone at ${venueName}: it waits here while you're away and plays the way your films say you play. Anyone who comes here can challenge it.`}
             </p>
             {mine.length > 1 && (
               <label className="pkLivingPick">
