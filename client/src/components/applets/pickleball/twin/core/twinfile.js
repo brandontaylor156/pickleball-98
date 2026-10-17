@@ -52,7 +52,7 @@ export const toTwin = (analysis, meta = {}) => {
 // object (from a file or a message) -> analysis, validated; throws on anything malformed
 export const fromTwin = (o) => {
   if (!o || o.format !== TWIN_FORMAT || typeof o.v !== "number") throw new Error("Not a Twin Replay file.")
-  if (o.v > TWIN_VERSION) throw new Error("This replay needs a newer 98ish.")
+  if (o.v > TWIN_VERSION) throw new Error("This replay needs a newer Pickleball 98.")
   const hz = Number(o.hz) || GRID_HZ
   const duration = Math.min(MAX_SECONDS, Math.max(0, Number(o.duration) || 0))
   const players = (Array.isArray(o.players) ? o.players : []).slice(0, 4).map((p, k) => {

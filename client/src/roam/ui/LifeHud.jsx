@@ -311,7 +311,7 @@ export function GiftSheet({ item, buddies = [], onGive, onClose, msg }) {
               </button>
             </>
           ) : (
-            <p>Sign on to 98 Messenger and add a buddy to give gifts.</p>
+            <p>Giving gifts to other players isn't available yet.</p>
           )}
           {msg && <p className="rlfMsg" data-life="gift-msg">{msg}</p>}
         </div>

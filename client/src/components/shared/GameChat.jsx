@@ -32,7 +32,6 @@ import { createPortal } from "react-dom"
 import { useNet } from "../applets/network/NetContext"
 import { getSettings, masterGain } from "../../utils/settings"
 import { getAudioContext, masterOutput } from "../../utils/audio"
-import { progress } from "../../utils/achievements"
 import "./gamechat/GameChat.css"
 
 const Panel = lazy(() => import("./gamechat/GameChatPanel"))
@@ -261,7 +260,6 @@ const ChatHost = ({ game, room, mode, title, net, ticker: showTicker = true }) =
       if (!socket?.connected) return resolve({ ok: false, error: "You aren't connected to the network." })
       socket.timeout(10_000).emit("gchat:send", { room, ...payload }, (timeout, result) => {
         const answer = timeout ? { ok: false, error: "The chat didn't answer. Try again." } : result
-        if (answer?.ok) progress("sociable", game, 3)
         resolve(answer || { ok: false, error: "No answer." })
       })
     })

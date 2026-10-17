@@ -34,7 +34,7 @@ export const Recorder = ({ onDone, onCancel }) => {
         await videoRef.current.play().catch(() => {})
         setState("ready")
       } catch (e) {
-        setError(e?.name === "NotAllowedError" ? "Camera access was turned down. Allow the camera for 98ish in Settings, or open a video you filmed instead." : e.message || "The camera didn't start.")
+        setError(e?.name === "NotAllowedError" ? "Camera access was turned down. Allow the camera for this site in Settings, or open a video you filmed instead." : e.message || "The camera didn't start.")
         setState("error")
       }
     }

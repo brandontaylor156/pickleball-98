@@ -17,7 +17,7 @@ const start = async ({ blocked = {}, limits } = {}) => {
   const sessions = new Map(
     Object.keys(TOKENS).map((key) => [key, { key, token: TOKENS[key], user: { screenName: NAMES[key], blocked: blocked[key] || [], groups: [{ name: "Buddies", buddies: BUDDIES[key] }] }, socket: { emit: (event, payload) => emitted.push({ to: key, event, payload }) } }])
   )
-  const aim = { sessions, store: { find: async (key) => (NAMES[key] ? { screenName: NAMES[key], blocked: blocked[key] || [] } : null) } }
+  const aim = { sessions, authenticate: async (token) => [...sessions.values()].find((s) => s.token === token) || null, store: { find: async (key) => (NAMES[key] ? { screenName: NAMES[key], blocked: blocked[key] || [] } : null) } }
   const store = memoryLifeStore()
   const life = createRoamLife({ aim: () => aim, store, limits })
   const app = express()

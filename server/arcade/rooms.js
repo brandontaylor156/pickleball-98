@@ -1,6 +1,6 @@
 // Online rooms: the shared multiplayer layer for 98ish games. A game writes its rules as a
 // small module; this file does everything else: Quick Match, private rooms with join codes,
-// invitations (through Network Neighborhood / 98 Messenger, server/net/games.js), seats,
+// invitations (server/net/invites.js), seats,
 // ready-up, kicking, computer players, timers, rematches, spectators, reconnecting, rate
 // limits and game chat (server/gamechat knows the room's players). The browser side is
 // client/src/components/shared/online (useOnlineRoom, PlayOnline, PlayOnlineButton).
@@ -98,7 +98,7 @@
 // game's view(state, you)) }
 //
 // Players are network computer ids (pids) with a name, exactly as Network Neighborhood
-// knows them (98 Messenger screen name, or GUEST-XXXX): guests can play. A dropped
+// knows them (player name, or GUEST-XXXX): guests can play. A dropped
 // connection keeps its seat for the network's 30 second grace (server/net/index.js), then a
 // computer player takes over (or the game is forfeited). Everything lives in memory.
 
@@ -145,7 +145,7 @@ const sizeOf = (v) => {
 const stable = (v) => (isObject(v) ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(",")}}` : Array.isArray(v) ? `[${v.map(stable).join(",")}]` : JSON.stringify(v ?? null))
 
 // games: the rules modules; emit(pid, event, payload) reaches one computer, emitVolatile
-// the same but may drop it (snapshots); blocked(a, b): either blocks the other in 98 Messenger
+// the same but may drop it (snapshots); blocked(a, b): either blocks the other
 const createRooms = ({ games = [], emit = () => {}, emitVolatile = null, blocked = () => false, clock = realClock, random = Math.random, times = {}, maxRooms = MAX_ROOMS } = {}) => {
   const T = { ...TIMES, ...times }
   const volatile = emitVolatile || emit
@@ -959,7 +959,7 @@ const createRooms = ({ games = [], emit = () => {}, emitVolatile = null, blocked
     return { ok: true }
   }
 
-  // ---------- invitations (server/net/games.js) ----------
+  // ---------- invitations (server/net/invites.js) ----------
 
   const canInvite = (pid, roomId) => {
     const room = rooms.get(String(roomId ?? ""))

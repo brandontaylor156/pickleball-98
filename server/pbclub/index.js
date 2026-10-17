@@ -1,15 +1,15 @@
-// Pickleball 98's Real Games (once "Pickleball Club 98"): the real-life side of pickleball for a group of 98 Messenger friends.
+// Pickleball 98's Real Games (once "Pickleball Club 98"): the real-life side of pickleball for a group of friends.
 // Log the games you play at real courts (the opponent confirms, so the friends' ratings stay
 // honest), see a friends-only rating ladder, and plan play sessions ("Who's in?") with RSVPs,
 // a waitlist, a little chat and the courts' rotation everyone at the session sees. The rules
 // are client/src/components/applets/pbclub/clubCore.js (the same file the app uses).
 //
-// Every route needs "Authorization: Bearer <token>" from a signed-on 98 Messenger session.
+// Every route needs "Authorization: Bearer <token>" from a player (server/players).
 // All POST, JSON in and out ({ ok, ... }):
 //   /state      { season }              -> { me, sessions, matches, ladder, names, now }
 //                                          season: ratings only from matches since (ms)
 //   /match      { match }               log a match (pending until an opponent confirms;
-//                                        "unrated" when there's no opponent on 98 Messenger)
+//                                        "unrated" when there's no opponent who plays Pickleball 98)
 //   /match/:id  { act }                 confirm | dispute | delete (who logged it, while it
 //                                        doesn't count) | remove (ask to take a confirmed one
 //                                        back) | agree (the other team agrees) | keep
@@ -20,7 +20,7 @@
 //   /session/:id/say      { text }      the session's chat (100 lines kept)
 //   /session/:id/rotation { rotation }  the courts for this round (anyone who's in)
 //   /session/:id/cancel   {}            the host
-// Live, on the 98 Messenger socket: "pb:changed" { kind, id, by } to everyone it concerns
+// Live, on the player's socket: "pb:changed" { kind, id, by } to everyone it concerns
 // (they read /state again). Push (category "pickleball") when they're away: invitations,
 // a session cancelled or moved, a waitlist spot opening, a match to confirm or disputed.
 //
@@ -34,7 +34,7 @@ const crypto = require("crypto")
 const { pathToFileURL } = require("url")
 const express = require("express")
 const { limiter } = require("../net/limiter")
-const { validate: validateName } = require("../aim/screenNames")
+const { validate: validateName } = require("../players/names")
 const { createClubStore, memoryStore } = require("./store")
 
 const WINDOW_MS = 10 * 60_000
@@ -78,11 +78,11 @@ const createClub = ({ aim, store, push = null, now = Date.now, limits = {} } = {
   // a screen name -> { key, name } of a real account that hasn't blocked (or been blocked by) me
   const accountOf = async (me, raw) => {
     const target = validateName(raw)
-    if (target.error) refuse(400, `"${String(raw).slice(0, 20)}" isn't a 98 Messenger screen name.`)
+    if (target.error) refuse(400, `"${String(raw).slice(0, 20)}" isn't a Pickleball 98 player name.`)
     if (target.key === BOT_KEY) refuse(400, "SmarterChild doesn't play pickleball.")
     if (target.key === me.key) return { key: me.key, name: me.name }
     const user = await (await getAim())?.store?.find?.(target.key)
-    if (!user) refuse(404, `${target.screenName} is not a 98 Messenger screen name.`)
+    if (!user) refuse(404, `${target.screenName} isn't a Pickleball 98 player.`)
     if ((user.blocked || []).includes(me.key) || (me.blocked || []).includes(target.key)) refuse(409, `You can't add ${user.screenName} right now.`)
     return { key: target.key, name: user.screenName || target.screenName }
   }
@@ -487,11 +487,8 @@ const createClub = ({ aim, store, push = null, now = Date.now, limits = {} } = {
 
     const accountFor = async (token) => {
       if (!/^[0-9a-f]{48}$/.test(token)) return null
-      const service = await getAim()
-      for (const session of service?.sessions?.values() || []) {
-        if (session.token === token) return { key: session.key, name: session.user?.screenName || session.key, blocked: session.user?.blocked || [] }
-      }
-      return null
+      const session = await (await getAim())?.authenticate?.(token)
+      return session ? { key: session.key, name: session.user?.screenName || session.key, blocked: session.user?.blocked || [] } : null
     }
 
     r.use(async (request, response, next) => {
@@ -501,7 +498,7 @@ const createClub = ({ aim, store, push = null, now = Date.now, limits = {} } = {
         const account = await accountFor(String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""))
         if (!account) {
           badTokens(ip)
-          return response.status(401).json({ ok: false, error: "Sign on to 98 Messenger to use Real Games with your friends." })
+          return response.status(401).json({ ok: false, error: "Pick a player name to use Real Games with your friends." })
         }
         if (writes(account.key)) return response.status(429).json({ ok: false, error: "That's a lot at once. Please wait a few minutes." })
         request.account = account

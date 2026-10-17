@@ -79,7 +79,7 @@ export const ClonePanel = ({ venueId, venueName, venueNames = {}, look, onClose 
       <div className="pkPanel pkLivingPanel window" data-living="panel">
         <b>My clone in the park</b>
         {!signed ? (
-          <p>Sign on to 98 Messenger to leave your clone here for your buddies.</p>
+          <p>Pick a player name to leave your clone in the park.</p>
         ) : !mine.length ? (
           <p>
             Make a clone of yourself first: film a game, then Twin Replay › the game › Stats › <b>Make a Clone</b>, and check <b>This is me</b>. Only your own clone can be left in the park.
@@ -91,9 +91,9 @@ export const ClonePanel = ({ venueId, venueName, venueNames = {}, look, onClose 
             <p className="pkMuted">
               {rec
                 ? here
-                  ? `Your clone is here at ${venueName} while you're away. Your buddies can challenge it.`
+                  ? `Your clone is here at ${venueName} while you're away. For now only you can see it: letting other players find and challenge clones is coming later.`
                   : `Your clone is at ${venueNames[rec.venue] || rec.venue}. Leaving it here moves it.`
-                : `Leave your clone at ${venueName}: while you're signed off, your buddies can find it here and play it. It plays the way your films say you play.`}
+                : `Leave your clone at ${venueName}: it waits here while you're away and plays the way your films say you play. For now only you can see it.`}
             </p>
             {mine.length > 1 && (
               <label className="pkLivingPick">

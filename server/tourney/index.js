@@ -4,7 +4,7 @@
 // uses). An event exists only as a schedule until the first person signs up; then it's a
 // record here.
 //
-// Every route needs "Authorization: Bearer <token>" from a signed-on 98 Messenger session.
+// Every route needs "Authorization: Bearer <token>" from a player (server/players).
 // All POST, JSON in and out ({ ok, ... }):
 //   /list      {}                         -> { now, events: [summary], trophies: [trophy] }
 //   /get       { id }                     -> { now, tourney }   (the full record, brought up to now)
@@ -16,7 +16,7 @@
 //   /room      { id, match, code }        the online room you made for that match (your
 //                                         opponents see "Join")
 //   /report    { id, match, score: [a, b] }  a player in the match, before the round's end
-// Live: "pb:changed" { kind: "tourney", id, by, partner? } on the 98 Messenger socket to
+// Live: "pb:changed" { kind: "tourney", id, by, partner? } on the player's socket to
 // everyone in it. Push (category "pickleball"): a partner invitation, the draw (your first
 // match), a trophy.
 //
@@ -30,7 +30,7 @@ const crypto = require("crypto")
 const { pathToFileURL } = require("url")
 const express = require("express")
 const { limiter } = require("../net/limiter")
-const { validate: validateName } = require("../aim/screenNames")
+const { validate: validateName } = require("../players/names")
 const { createTourneyStore, memoryStore } = require("./store")
 
 const WINDOW_MS = 10 * 60_000
@@ -71,11 +71,11 @@ const createTourneys = ({ aim, store, push = null, now = Date.now, limits = {} }
 
   const accountOf = async (me, raw) => {
     const target = validateName(raw)
-    if (target.error) refuse(400, `"${String(raw).slice(0, 20)}" isn't a 98 Messenger screen name.`)
+    if (target.error) refuse(400, `"${String(raw).slice(0, 20)}" isn't a Pickleball 98 player name.`)
     if (target.key === BOT_KEY) refuse(400, "SmarterChild doesn't play pickleball.")
     if (target.key === me.key) refuse(400, "Pick someone else as your partner.")
     const user = await (await getAim())?.store?.find?.(target.key)
-    if (!user) refuse(404, `${target.screenName} is not a 98 Messenger screen name.`)
+    if (!user) refuse(404, `${target.screenName} isn't a Pickleball 98 player.`)
     if ((user.blocked || []).includes(me.key) || (me.blocked || []).includes(target.key)) refuse(409, `You can't team up with ${user.screenName} right now.`)
     return { key: target.key, name: user.screenName || target.screenName }
   }
@@ -371,9 +371,8 @@ const createTourneys = ({ aim, store, push = null, now = Date.now, limits = {} }
     const ipOf = (request) => String(request.headers["x-forwarded-for"] || request.socket.remoteAddress || "").split(",")[0].trim()
     const accountFor = async (token) => {
       if (!/^[0-9a-f]{48}$/.test(token)) return null
-      const service = await getAim()
-      for (const session of service?.sessions?.values() || []) if (session.token === token) return { key: session.key, name: session.user?.screenName || session.key, blocked: session.user?.blocked || [] }
-      return null
+      const session = await (await getAim())?.authenticate?.(token)
+      return session ? { key: session.key, name: session.user?.screenName || session.key, blocked: session.user?.blocked || [] } : null
     }
     r.use(async (request, response, next) => {
       try {
@@ -382,7 +381,7 @@ const createTourneys = ({ aim, store, push = null, now = Date.now, limits = {} }
         const account = await accountFor(String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""))
         if (!account) {
           badTokens(ip)
-          return response.status(401).json({ ok: false, error: "Sign on to 98 Messenger to play in tournaments." })
+          return response.status(401).json({ ok: false, error: "Pick a player name to play in tournaments." })
         }
         if (writes(account.key)) return response.status(429).json({ ok: false, error: "That's a lot at once. Please wait a few minutes." })
         request.account = account

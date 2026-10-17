@@ -1,16 +1,14 @@
 // My Park > Watch TV (pure): what's on. The owner: "Ability to watch tv at the lobby/gym/
 // wherever gym." Only things that are yours or your friends' to show, never a broadcast:
 //   live      a friend's game, live (Live Broadcast: bc:list), this venue's first
-//   videos    the videos on your drive C: (Media Player's library: your highlight reels too)
-//   together  YouTube with your partner or a buddy, in sync (Watch Together, its own window,
-//             through YouTube's own player)
+//   videos    videos you open from this device (your highlight reels too)
 
-export const CHANNELS = ["live", "videos", "together"]
+export const CHANNELS = ["live", "videos"]
+export const OPEN_VIDEO = "open-video" // the videos channel's "Open a video..." item
 
-export const channelsFor = ({ pal = null, signedOn = false } = {}) => [
+export const channelsFor = () => [
   { id: "live", label: "📡 Live" },
   { id: "videos", label: "🎞 My videos" },
-  { id: "together", label: pal ? `💞 With ${pal.name}` : "▶ YouTube", disabled: !signedOn },
 ]
 
 const mmss = (s) => {
@@ -19,7 +17,7 @@ const mmss = (s) => {
 }
 
 // what the TV's menu says and lists for a channel
-export const listFor = (channel, { live = [], videos = [], venue = null, venueName = (id) => id, pal = null, signedOn = false } = {}) => {
+export const listFor = (channel, { live = [], videos = [], venue = null, venueName = (id) => id } = {}) => {
   if (channel === "live") {
     const list = live
       .filter((b) => b && b.id)
@@ -30,11 +28,8 @@ export const listFor = (channel, { live = [], videos = [], venue = null, venueNa
   }
   if (channel === "videos") {
     const list = videos.filter((v) => v && v.file).map((v) => ({ id: v.key || v.name, name: v.title || v.name || "Video", sub: v.duration ? mmss(v.duration) : "Video", video: v }))
-    return { msg: list.length ? "On drive C:" : "No videos on drive C: yet. Videos you add to My Videos (Media Player > Add Videos), your highlight reels too, play on this TV.", list }
-  }
-  if (channel === "together") {
-    if (!signedOn) return { msg: "Watch Together needs 98 Messenger: sign on first, then pick a YouTube video to watch in sync.", list: [] }
-    return { msg: pal ? `Watch Together opens: pick a YouTube video and ${pal.name} gets a Join button. Watch it here together.` : "Watch Together opens: pick a YouTube video, then invite a buddy to watch with you.", list: [] }
+    const open = { id: OPEN_VIDEO, name: "Open a video...", sub: "From this device" }
+    return { msg: list.length ? "Your videos:" : "Open a video from this device (your highlight reels too) to play it on this TV.", list: [...list, open] }
   }
   return { msg: "", list: [] }
 }

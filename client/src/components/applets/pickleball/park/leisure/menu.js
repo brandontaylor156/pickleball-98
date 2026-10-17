@@ -1,7 +1,7 @@
 // My Park leisure: what you can order and buy, and paying for it (pure; Node-tested).
 //
 // The owner: "Ordering food at the bar or drinks or at the clubhouse/restaurant". Original items
-// (no brands), priced in Casino 98's play chips (the shared chip bank, casino/bank.js: no real
+// (no brands), priced in play chips (utils/bank.js: no real
 // money; when you're broke the house refills you). A bar serves drinks and food, a cafe coffee,
 // smoothies and a bite, a snack window the classics, a drinks machine cold drinks.
 //
@@ -51,7 +51,7 @@ export const MENUS = {
 }
 export const menuFor = (spot) => (MENUS[spot?.kind === "vending" ? "vending" : spot?.menu] || []).map(itemById).filter(Boolean)
 
-// paying: the bank (casino/bank.js shape: { balance, take(n) -> ok, needsRefill(), refill() })
+// paying: the bank (utils/bank.js shape: { balance, take(n) -> ok, needsRefill(), refill() })
 // for = "me" | "pal" | "both" -> { ok, cost, error?, refilled? }
 export const costOf = (item, who = "me") => (item ? item.price * (who === "both" ? 2 : 1) : 0)
 export const pay = (bank, item, who = "me") => {

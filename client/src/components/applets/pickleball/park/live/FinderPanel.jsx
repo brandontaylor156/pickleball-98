@@ -12,7 +12,7 @@ import "./finder.css"
 //
 // onPick(id, place): place is the index row for a Venue Finder venue (null for featured ones),
 // kept in prefs so starred venues show without loading the index. badges: { venueId: text }
-// (Live Venue Presence: "2 friends here now · 3 playing in 98ish").
+// (Live Venue Presence: "2 friends here now · 3 playing now").
 
 const describe = (v) => {
   const n = v.courts !== undefined && v.title !== undefined ? courtCount(v) : v.courts

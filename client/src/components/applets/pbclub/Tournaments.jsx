@@ -5,6 +5,7 @@ import * as T from "./tourneyCore"
 import * as net from "../../../utils/tourney"
 import "./Tournaments.css"
 import { ScoreBug } from "./ScoreBug"
+import { AddByName } from "./Sessions"
 
 // Real Games > Tournaments (and My Park's tournament chip): the week's events at the real
 // venues (original names; tourneyCore.js), signing up with a partner, the bracket drawn like a
@@ -101,17 +102,20 @@ const SignUp = ({ ev, buddies, onDone }) => {
         ))}
       </div>
       {kind === "doubles" && (
-        <label className="tnPartner">
-          Partner
-          <Select value={partner} onChange={(e) => setPartner(e.target.value)} data-partner>
-            <option value="">A computer partner</option>
-            {buddies.map((b) => (
-              <option key={b.k} value={b.name}>
-                {b.name} (they accept)
-              </option>
-            ))}
-          </Select>
-        </label>
+        <>
+          <label className="tnPartner">
+            Partner
+            <Select value={partner} onChange={(e) => setPartner(e.target.value)} data-partner>
+              <option value="">A computer partner</option>
+              {[...buddies, ...(partner && !buddies.some((b) => b.name === partner) ? [{ k: partner, name: partner }] : [])].map((b) => (
+                <option key={b.k} value={b.name}>
+                  {b.name} (they accept)
+                </option>
+              ))}
+            </Select>
+          </label>
+          <AddByName label="Another player as your partner" onAdd={setPartner} />
+        </>
       )}
       <button
         type="button"
@@ -274,7 +278,7 @@ const Detail = ({ id, state, buddies, onBack, onPlay }) => {
           })}
         </div>
       )}
-      <p className="pbMuted tnFine">98ish's own events, made up for the game: not affiliated with the venue or any real tournament.</p>
+      <p className="pbMuted tnFine">Pickleball 98's own events, made up for the game: not affiliated with the venue or any real tournament.</p>
     </div>
   )
 }
@@ -291,7 +295,7 @@ const Tournaments = ({ buddies = [], onPlay = null, focus = null, venue = null }
   }, [])
   const now = state.now || Date.now()
   const events = useMemo(() => state.events.filter((e) => !venue || e.venue === venue), [state.events, venue])
-  if (state.status === "off") return <p className="pbBannerInfo">Sign on to 98 Messenger to sign up for tournaments. Your trophies stay on this phone.</p>
+  if (state.status === "off") return <p className="pbBannerInfo">Pick a player name to sign up for tournaments. Your trophies stay on this device.</p>
   if (open) return <Detail id={open} state={state} buddies={buddies} onBack={() => setOpen(null)} onPlay={onPlay} />
   const mine = events.filter((e) => e.entry || e.next)
   return (

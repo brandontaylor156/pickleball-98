@@ -1,34 +1,34 @@
 {
-  "name": "98ish",
+  "name": "pickleball-98",
   "version": "1.0.0",
-  "description": "Socket.io chat server for 98ish",
+  "description": "Pickleball 98: the game server (players, online rooms, My Park, Explore, Real Games, tournaments)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test \"server/web/test/*.test.*\" \"server/net/test/*.test.*\" \"server/aim/test/*.test.*\" \"server/drive/test/*.test.*\" \"server/mail/test/*.test.*\" \"server/gamechat/test/*.test.*\" \"server/puzzles/test/*.test.*\" \"server/quiz/test/*.test.*\" \"server/couples/test/*.test.*\" \"server/dollhouse/test/*.test.*\" \"server/town/test/*.test.*\" \"server/pet/test/*.test.*\" \"server/arcade/test/*.test.*\" \"server/calendar/test/*.test.*\" \"server/push/test/*.test.*\" \"server/contacts/test/*.test.*\" \"server/notes/test/*.test.*\" \"server/albums/test/*.test.*\" \"server/meter/test/*.test.*\" \"server/account/test/*.test.*\" \"server/park/test/*.test.*\" \"server/roam/test/*.test.*\" \"server/voice/test/*.test.*\" \"server/broadcast/test/*.test.*\" \"server/lanparty/test/*.test.*\" \"server/venues/test/*.test.*\" \"server/locate/test/*.test.*\" \"server/pbclub/test/*.test.*\" \"server/livingpark/test/*.test.*\" \"server/tourney/test/*.test.*\""
+    "test": "node --test \"server/players/test/*.test.*\" \"server/net/test/*.test.*\" \"server/arcade/test/*.test.*\" \"server/park/test/*.test.*\" \"server/roam/test/*.test.*\" \"server/broadcast/test/*.test.*\" \"server/voice/test/*.test.*\" \"server/venues/test/*.test.*\" \"server/pbclub/test/*.test.*\" \"server/livingpark/test/*.test.*\" \"server/tourney/test/*.test.*\""
   },
   "engines": {
     "node": ">=20"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/brandontaylor156/98ish.git"
+    "url": "git+https://github.com/brandontaylor156/pickleball-98.git"
   },
   "keywords": [],
   "author": "Brandon Taylor and Cameron De Robertis",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/brandontaylor156/98ish/issues"
+    "url": "https://github.com/brandontaylor156/pickleball-98/issues"
   },
-  "homepage": "https://github.com/brandontaylor156/98ish#readme",
+  "homepage": "https://github.com/brandontaylor156/pickleball-98#readme",
   "dependencies": {
-    "@vercel/blob": "^2.8.0",
-    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "mongoose": "^9.10.3",
     "socket.io": "^4.8.4",
-    "web-push": "^3.6.7",
-    "yjs": "^13.6.33"
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
   }
 }

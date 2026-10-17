@@ -28,7 +28,7 @@ const PlayerPicker = ({ label, value, people, taken = [], onChange, id }) => {
             {p.name}
           </option>
         ))}
-        <option value={GUEST}>A guest (not on 98 Messenger)</option>
+        <option value={GUEST}>A guest (no player name)</option>
       </Select>
       {value?.g !== undefined && <input type="text" maxLength={24} placeholder="Guest's name" value={value.g} aria-label={`${label}: guest's name`} onChange={(e) => onChange({ g: e.target.value })} />}
     </div>

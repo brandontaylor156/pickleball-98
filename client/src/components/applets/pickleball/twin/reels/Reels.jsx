@@ -2,31 +2,22 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import { pickMoments } from "./moments.js"
 import { buildTimeline } from "./timeline.js"
 import { shareOut } from "../../../../../utils/share"
-import { useAlbums, addToAlbum, refreshAlbums, albumsSignedOn } from "../../../../../utils/albums"
-import Combo from "../../../../shared/select/Combo"
 import "./Reels.css"
 
 // Instant Replay Reels (Twin Replay > a game > Make Highlights): picks the best rallies, cuts
 // a broadcast-style film (your video, a 3D replay of the best point, Hawk-Eye for close calls,
 // a generated soundtrack) and saves or shares it. Everything is made on this device.
 //   prepare(moment): loads that rally into the engine; getEngine(): the Pickleball engine
-const ALBUM_MAX_S = 60
-const ALBUM_MAX_BYTES = 12 * 1024 * 1024
+const REEL_MAX_S = 60
 
 export const Reels = ({ analysis, game, video, getEngine, prepare, onBack }) => {
   const picked = useMemo(() => pickMoments(analysis, { max: 5 }), [analysis])
   const [list, setList] = useState(picked)
   const [state, setState] = useState({ phase: "plan" }) // plan | making | done | error
-  const [album, setAlbum] = useState("")
-  const [note, setNote] = useState(null)
   const abort = useRef(null)
-  const albums = useAlbums()
-  const plan = useMemo(() => buildTimeline(list, { hasVideo: !!video, maxSec: ALBUM_MAX_S }), [list, video])
+  const plan = useMemo(() => buildTimeline(list, { hasVideo: !!video, maxSec: REEL_MAX_S }), [list, video])
   const resultUrl = useMemo(() => (state.result ? URL.createObjectURL(state.result.blob) : null), [state.result])
   useEffect(() => () => resultUrl && URL.revokeObjectURL(resultUrl), [resultUrl])
-  useEffect(() => {
-    if (albumsSignedOn()) refreshAlbums().catch(() => {})
-  }, [])
   useEffect(() => () => abort.current?.abort(), [])
 
   const move = (i, d) => setList((l) => {
@@ -41,7 +32,6 @@ export const Reels = ({ analysis, game, video, getEngine, prepare, onBack }) => 
   const make = async () => {
     const ctrl = new AbortController()
     abort.current = ctrl
-    setNote(null)
     setState({ phase: "making", pct: 0, what: "Starting" })
     try {
       const { renderReel } = await import("./render.js")
@@ -58,13 +48,6 @@ export const Reels = ({ analysis, game, video, getEngine, prepare, onBack }) => 
   const fileName = () => `${(game.title || "Highlights").replace(/[\\/:*?"<>|]/g, "").slice(0, 40)} highlights.${state.result.ext}`
   const save = () => shareOut({ files: [{ name: fileName(), data: state.result.blob, mime: state.result.mime }], title: `${game.title || "Pickleball"} highlights` }, "phone", { title: "Save Highlights" })
   const share = () => shareOut({ files: [{ name: fileName(), data: state.result.blob, mime: state.result.mime }], title: `${game.title || "Pickleball"} highlights`, text: "Highlights from Pickleball 98" }, "apps", { title: "Share Highlights" })
-  const toAlbum = async () => {
-    const r = state.result
-    if (r.duration > ALBUM_MAX_S || r.blob.size > ALBUM_MAX_BYTES) return setNote(`Shared albums take videos up to ${ALBUM_MAX_S} s and 12 MB; this one is ${Math.round(r.duration)} s, ${(r.blob.size / 1048576).toFixed(1)} MB. Save it to your device instead.`)
-    const file = new File([r.blob], fileName(), { type: r.mime })
-    const res = await addToAlbum(album, [file], { caption: `${game.title || "Pickleball"} highlights` })
-    setNote(res?.ok === false ? res.error : "Added to the album. It uploads in the background.")
-  }
 
   return (
     <div className="pkReels window" data-reels={state.phase}>
@@ -122,13 +105,6 @@ export const Reels = ({ analysis, game, video, getEngine, prepare, onBack }) => 
             <button type="button" className="pkPrimary" onClick={save} data-action="save-reel">Save to Device</button>
             <button type="button" onClick={share}>Share...</button>
           </div>
-          {albums?.albums?.length > 0 && (
-            <div className="pkReelsActions">
-              <Combo value={album} options={[["", "Choose an album..."], ...albums.albums.map((a) => [a.id, a.name])]} onChange={setAlbum} ariaLabel="Shared album" name="reel-album" />
-              <button type="button" onClick={toAlbum} disabled={!album}>Add to Album</button>
-            </div>
-          )}
-          {note && <p className="pkReelsNote">{note}</p>}
           <button type="button" onClick={() => setState({ phase: "plan" })}>Make another</button>
         </div>
       )}

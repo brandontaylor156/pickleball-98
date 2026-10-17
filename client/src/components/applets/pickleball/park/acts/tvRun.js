@@ -1,13 +1,26 @@
 // My Park > Watch TV, at a venue's TV (three.js): you sit on a seat that faces it (or stand in
 // front of it), the camera looks at the set over your shoulder, and the set itself shows what
-// you picked: your videos play on its screen (a video texture), a friend's live game opens
-// Live Broadcast's watch screen, YouTube together opens Watch Together. Idle, a test card.
+// you picked: a video you open from this device plays on its screen (a video texture), a
+// friend's live game opens Live Broadcast's watch screen. Idle, a test card.
 //
-//   createTvRun({ spot, channel, live, pal, signedOn })
+//   createTvRun({ spot, channel, live })
 
 import * as THREE from "three"
-import { channelsFor, listFor, seatFor } from "./tv.js"
-import { mediaBlob } from "../../../../../utils/fs"
+import { OPEN_VIDEO, channelsFor, listFor, seatFor } from "./tv.js"
+
+// the videos opened this visit ({ key, name, title, file: a File }), for every TV
+const opened = []
+
+// the device's file picker -> a File, or null if nothing was picked
+const pickVideo = () =>
+  new Promise((resolve) => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = "video/*"
+    input.onchange = () => resolve(input.files?.[0] || null)
+    input.oncancel = () => resolve(null)
+    input.click()
+  })
 
 const testCard = (title) => {
   const c = document.createElement("canvas")
@@ -24,7 +37,7 @@ const testCard = (title) => {
   g.fillStyle = "#fff"
   g.font = "bold 18px sans-serif"
   g.textAlign = "center"
-  g.fillText("98ish TV", 128, 122)
+  g.fillText("Pickleball 98 TV", 128, 122)
   g.font = "12px sans-serif"
   g.fillText(title, 128, 138)
   const t = new THREE.CanvasTexture(c)
@@ -32,7 +45,7 @@ const testCard = (title) => {
   return t
 }
 
-export const createTvRun = ({ spot, channel = "live", live = [], pal = null, signedOn = false, venueName = (id) => id } = {}) => {
+export const createTvRun = ({ spot, channel = "live", live = [], venueName = (id) => id } = {}) => {
   const tv = spot.tv
   const n = { x: Math.sin(tv.a), z: Math.cos(tv.a) }
   let api = null
@@ -41,7 +54,6 @@ export const createTvRun = ({ spot, channel = "live", live = [], pal = null, sig
   let video = null
   let url = null
   let seat = null
-  let videos = []
   let ch = channel
   let playing = null
   let note = null
@@ -73,24 +85,15 @@ export const createTvRun = ({ spot, channel = "live", live = [], pal = null, sig
     video = null
     playing = null
   }
-  const loadVideos = async () => {
-    try {
-      const { listVideos } = await import("../../../mediaPlayer/videoStore")
-      videos = listVideos()
-    } catch {
-      videos = []
-    }
-    emitHud(true)
-  }
 
   const hud = () => {
-    const l = listFor(ch, { live, videos, venue: api?.venue, venueName, pal, signedOn })
+    const l = listFor(ch, { live, videos: opened, venue: api?.venue, venueName })
     return {
       kind: "tv",
       court: spot.name,
-      title: playing ? playing.name : ch === "live" ? "Live courts" : ch === "videos" ? "My videos" : "Watch Together",
+      title: playing ? playing.name : ch === "live" ? "Live courts" : "My videos",
       channel: ch,
-      channels: channelsFor({ pal, signedOn }),
+      channels: channelsFor(),
       msg: l.msg,
       list: l.list.map(({ video: _v, ...it }) => it),
       playing: playing ? { name: playing.name, paused: !!video?.paused } : null,
@@ -126,7 +129,6 @@ export const createTvRun = ({ spot, channel = "live", live = [], pal = null, sig
         const yaw = Math.atan2(tv.x - spot.x, tv.z - spot.z)
         return { sit: { x: spot.x, z: spot.z, vx: 0, vz: 0, facing: yaw, ball: { x: tv.x, y: tv.y, z: tv.z }, holding: false, swing: null, prep: null, high: null, charging: false, between: true, atNet: false, depth: 6, goal: null, hand: 1, twoHand: false, person: true, oppHit: null, want: { x: 0, z: 0 }, id: "tv", phase: "intro", phaseT: 0, point: 0, mate: null, across: null, receiving: false }, mood: { kind: "watch" }, gear: "none", key: "tv", y: spot.y || 0 }
       }
-      loadVideos()
       emitHud(true)
     },
     step(dt) {
@@ -164,18 +166,23 @@ export const createTvRun = ({ spot, channel = "live", live = [], pal = null, sig
       ch = id
       if (id !== "videos") {
         stopVideo()
-        setCard(id === "live" ? "Live courts" : "Watch Together")
+        setCard("Live courts")
       }
       emitHud(true)
     },
     async play(item) {
-      const v = videos.find((x) => (x.key || x.name) === item.id)
+      let v = opened.find((x) => x.key === item.id)
+      if (item.id === OPEN_VIDEO) {
+        const file = await pickVideo()
+        if (!file) return
+        v = { key: `${file.name}:${file.size}:${file.lastModified}`, name: file.name, title: file.name.replace(/\.[^.]+$/, ""), file }
+        if (!opened.some((x) => x.key === v.key)) opened.unshift(v)
+        item = { id: v.key, name: v.title }
+      }
       if (!v) return
       stopVideo()
       try {
-        const blob = await mediaBlob(v.file)
-        if (!blob) throw new Error("empty")
-        url = URL.createObjectURL(blob)
+        url = URL.createObjectURL(v.file)
         video = document.createElement("video")
         video.playsInline = true
         video.setAttribute("playsinline", "")
@@ -195,7 +202,7 @@ export const createTvRun = ({ spot, channel = "live", live = [], pal = null, sig
         }
       } catch {
         stopVideo()
-        say("That video didn't play here. Try it in Media Player.")
+        say("That video didn't play here. Try another one (MP4 plays almost everywhere).")
       }
       emitHud(true)
     },
@@ -220,7 +227,7 @@ export const createTvRun = ({ spot, channel = "live", live = [], pal = null, sig
       return () => listeners.delete(fn)
     },
     get state() {
-      return { channel: ch, playing, seat: seat?.id || null, videos: videos.length }
+      return { channel: ch, playing, seat: seat?.id || null, videos: opened.length }
     },
     stop() {
       stopVideo()

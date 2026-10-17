@@ -300,7 +300,7 @@ const createPark = ({ emit = () => {}, emitVolatile = null, rooms = null, clock 
   let iceSource = ice
   const iceConfig = async () => {
     try {
-      iceSource ??= require("../aim/ice").createIce()
+      iceSource ??= require("../voice/ice").createIce()
       return await iceSource.config()
     } catch {
       return { iceServers: [{ urls: "stun:stun.l.google.com:19302" }], turn: false }
@@ -589,8 +589,8 @@ const createPark = ({ emit = () => {}, emitVolatile = null, rooms = null, clock 
     on("park:fx", (me, p) => fx(me.pid, p))
     on("park:hold", (me, p) => hold(me.pid, p))
     // (the account's park finds: ./finds.js)
-    on("park:finds", (me) => (finds && me.key ? finds.get(me.key) : { ok: false, error: "Sign on to 98 Messenger to keep your finds." }))
-    on("park:find", (me, p) => (finds && me.key ? finds.add(me.key, p.id, { venue: p.venue }) : { ok: false, error: "Sign on to 98 Messenger to keep your finds." }))
+    on("park:finds", (me) => (finds && me.key ? finds.get(me.key) : { ok: false, error: "Pick a player name to keep your finds." }))
+    on("park:find", (me, p) => (finds && me.key ? finds.add(me.key, p.id, { venue: p.venue }) : { ok: false, error: "Pick a player name to keep your finds." }))
     on("park:call", (me, p) => call(me.pid, p.court))
     on("park:uncall", (me) => uncall(me.pid))
     on("park:up", (me, p) => up(me.pid, p.court))

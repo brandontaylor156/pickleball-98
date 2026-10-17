@@ -28,7 +28,7 @@ export default [
   { id: "glen", kind: "disk", place: "Valencia Glen Park", lat: 34.395199, lon: -118.548624, name: "PICNIC.CAL", text: "A Calendar invite: \"Picnic. Every Saturday. Forever.\" Accepted by 14 ants." },
   { id: "meadows", kind: "disk", place: "Valencia Meadows Park", lat: 34.392531, lon: -118.555618, name: "SWING.AVI", text: "A home video of someone swinging so high they reached Windows 2000." },
   { id: "hills-paseo", kind: "disk", place: "Valencia Hills Paseo", lat: 34.388052, lon: -118.554411, name: "SHORTCUT.LNK", text: "A shortcut to the paseo. Valencia had shortcuts before your desktop did." },
-  { id: "hart", kind: "npc", place: "William S. Hart Ranch House", lat: 34.375929, lon: -118.526397, name: "The Ranch Hand", text: "\"Howdy. The bison out back don't use 98 Messenger, but they do leave you on Read.\"" },
+  { id: "hart", kind: "npc", place: "William S. Hart Ranch House", lat: 34.375929, lon: -118.526397, name: "The Ranch Hand", text: "\"Howdy. The bison out back don't text back, but they do leave you on Read.\"" },
   { id: "bouquet", kind: "disk", place: "Bouquet Canyon Park", lat: 34.452927, lon: -118.504838, name: "KITCHEN.RUL", text: "Rule 1: stay out of the kitchen. Rule 2: unless the ball bounced. Rule 3: see Rule 1." },
   { id: "lookout", kind: "couple", place: "Lookout Point", lat: 34.387728, lon: -118.50978, name: "Two at the Lookout", text: "Two names scratched into the railing with a heart round them, and the whole valley lit up below. It only shows up when you come here together." },
   { id: "turbo", kind: "car", place: "Parking Lot 1", lat: 34.40384, lon: -118.567518, name: "The Turbo 98", text: "Teal paint, a pink stripe and a glow underneath: the Turbo 98. It's quick. Don't tell the college." },

@@ -113,7 +113,7 @@ export const cleanMatch = (input, now = Date.now()) => {
   if (teams.length !== 2 || teams.some((t) => t.length !== size || t.some((p) => !p))) return { ok: false, error: kind === "singles" ? "Pick one player on each side." : "Pick two players on each team." }
   const ids = teams.flat().map(pid)
   if (new Set(ids).size !== ids.length) return { ok: false, error: "Someone is in the match twice." }
-  if (!teams.flat().some((p) => p.k)) return { ok: false, error: "Add at least one 98 Messenger player." }
+  if (!teams.flat().some((p) => p.k)) return { ok: false, error: "Add at least one Pickleball 98 player." }
   const games = Array.isArray(input?.games) ? input.games.slice(0, LIMITS.games + 1) : []
   if (!games.length || games.length > LIMITS.games) return { ok: false, error: "Enter the score of each game (1 to 5 games)." }
   const clean = []

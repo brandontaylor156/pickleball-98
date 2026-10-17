@@ -17,6 +17,7 @@ const start = async ({ blocked = {}, online = ["bob", "carol", "dave"] } = {}) =
   // (only the online ones have a session; the server only reads sessions for tokens and presence)
   const aim = {
     sessions: { get: (k) => (live.has(k) ? sessions.get(k) : undefined), values: () => [...sessions.values()] },
+    authenticate: async (token) => [...sessions.values()].find((s) => s.token === token) || null,
     store: { find: async (key) => (NAMES[key] ? { screenName: NAMES[key], blocked: blocked[key] || [], groups: GROUPS[key] } : null) },
   }
   const push = { notify: async (key, category, message, opts) => (pushed.push({ key, category, message, opts }), { sent: 1 }) }

@@ -1,5 +1,5 @@
 // Roam life (Explore in Pickleball 98, client/src/roam/; docs/open-world.md "Home, work, the
-// stores and your Bag"), kept per 98 Messenger account: your private Home and Work places, the
+// stores and your Bag"), kept per player: your private Home and Work places, the
 // Bag (what you bought with play chips), gifts waiting for you, and your time worked at the
 // office. One small record per account (MongoDB collection "roamlife" when MONGODB_URI is set,
 // otherwise memory). The rules are the client's own pure files, loaded here like Buddy
@@ -11,7 +11,7 @@
 // it. Nothing about a real address is stored: a place is a building you picked in the game's
 // town (its id, the town, metres from the town's origin, the door).
 //
-// Every route needs "Authorization: Bearer <token>" from a signed-on 98 Messenger session.
+// Every route needs "Authorization: Bearer <token>" from a player (server/players).
 // All POST, JSON in and out ({ ok, ... }):
 //   /state                       -> { places, shared, bag, gifts, work }   (shared: the places
 //                                   buddies share with you: [{ owner, ownerName, label, ...place }])
@@ -23,7 +23,7 @@
 //   /bag/gift     { to, id, note }   one of mine to a buddy (out of my Bag into their gifts)
 //   /gifts/accept { id }         into my Bag;  /gifts/decline { id }  back to the sender's Bag
 //   /work         { secs }       time worked (clocked out): the total and the count
-// Live, on the 98 Messenger socket: "roamlife:gift" { from, name, item } to the one given to,
+// Live, on the player's socket: "roamlife:gift" { from, name, item } to the one given to,
 // "roamlife:changed" to my own other devices.
 //
 // Caps (Atlas' free 512 MB): 10 places (each shared with 10 at most), 80 kinds / 2,000 things in
@@ -36,7 +36,7 @@ const crypto = require("crypto")
 const express = require("express")
 const mongoose = require("mongoose")
 const { limiter } = require("../net/limiter")
-const { validate: validateName, normalize } = require("../aim/screenNames")
+const { validate: validateName, normalize } = require("../players/names")
 
 const WINDOW_MS = 10 * 60_000
 const BOT_KEY = "smarterchild"
@@ -162,7 +162,7 @@ const createRoamLife = ({ aim, store = null, now = Date.now, limits = {} } = {})
     if (target.key === account.key) refuse(400, "That's you!")
     if (target.key === BOT_KEY) refuse(400, "SmarterChild stays right here in the computer.")
     const user = await userOf(target.key)
-    if (!user) refuse(404, `${target.screenName} isn't a registered screen name.`)
+    if (!user) refuse(404, `${target.screenName} isn't a Pickleball 98 player.`)
     if (!account.buddies.has(target.key)) refuse(403, `Add ${user.name} to your Buddy List first.`)
     if (await blockedBetween(account.key, target.key)) refuse(403, `You can't share with ${user.name}.`)
     return { key: target.key, name: user.name }
@@ -301,14 +301,11 @@ const createRoamLife = ({ aim, store = null, now = Date.now, limits = {} } = {})
     const ipOf = (request) => String(request.headers["x-forwarded-for"] || request.socket.remoteAddress || "").split(",")[0].trim()
     const accountFor = async (token) => {
       if (!/^[0-9a-f]{48}$/.test(token)) return null
-      const service = await getAim()
-      for (const session of service?.sessions?.values() || []) {
-        if (session.token !== token) continue
-        const buddies = new Set()
-        for (const group of session.user?.groups || []) for (const name of group.buddies || []) buddies.add(normalize(name))
-        return { key: session.key, name: session.user?.screenName || session.key, buddies }
-      }
-      return null
+      const session = await (await getAim())?.authenticate?.(token)
+      if (!session) return null
+      const buddies = new Set()
+      for (const group of session.user?.groups || []) for (const name of group.buddies || []) buddies.add(normalize(name))
+      return { key: session.key, name: session.user?.screenName || session.key, buddies }
     }
     r.use(async (request, response, next) => {
       try {
@@ -317,7 +314,7 @@ const createRoamLife = ({ aim, store = null, now = Date.now, limits = {} } = {})
         const account = await accountFor(String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""))
         if (!account) {
           badTokens(ip)
-          return response.status(401).json({ ok: false, error: "Sign on to 98 Messenger to keep your places and Bag on your account." })
+          return response.status(401).json({ ok: false, error: "Pick a player name to keep your places and Bag on your account." })
         }
         if (requests(account.key)) return response.status(429).json({ ok: false, error: "Slow down a little and try again in a few minutes." })
         request.account = account

@@ -7,10 +7,9 @@ const http = require("node:http")
 const path = require("node:path")
 const { Server } = require("socket.io")
 const { createRooms, CODE_CHARS } = require("../rooms")
-const { createGames } = require("../../net/games")
+const { createInvites } = require("../../net/invites")
 const { attachNet } = require("../../net")
 const tictactoe = require("./tictactoe.fixture")
-const checkers = require("../games/checkers")
 
 // A clock the tests move by hand
 const fakeClock = () => {
@@ -324,10 +323,10 @@ test("leaving a game without computer players: the others win, and there's no re
   assert.match(env.rooms.fillBots("a", made.roomId).error, /computer players/)
 })
 
-test("invitations through Network Neighborhood let people into a private room", () => {
+test("invitations let people into a private room", () => {
   const env = setup()
   const inbox = { a: [], b: [] }
-  const games = createGames({ emit: (pid, event, payload) => inbox[pid]?.push({ event, payload }), rooms: env.rooms })
+  const games = createInvites({ emit: (pid, event, payload) => inbox[pid]?.push({ event, payload }), rooms: env.rooms })
   const made = env.rooms.create(me("a"), "tictactoe")
   // nobody gets in by id alone
   assert.match(env.rooms.join(me("b"), { roomId: made.roomId }).error, /closed/)
@@ -427,37 +426,11 @@ test("relay rooms: the host streams snapshots, guests send inputs, the host ends
   assert.equal(view.seats.length, 4)
 })
 
-test("checkers on rooms: a full game between computer players always ends", () => {
-  let seed = 7
-  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
-  const players = [{ id: 0, name: "A", bot: true }, { id: 1, name: "B", bot: true }]
-  let state = checkers.create({ players, settings: {}, random })
-  let plies = 0
-  while (!checkers.isOver(state) && plies < 400) {
-    const seat = state.colors.indexOf(state.game.turn)
-    const action = checkers.bot(state, seat, { random })
-    state = checkers.action(state, seat, action)
-    assert.equal(state.error, undefined)
-    plies++
-  }
-  assert.ok(checkers.isOver(state), "finished")
-  // views: legal moves only for the side to move, nothing for spectators
-  const fresh = checkers.create({ players, settings: {}, random: () => 0.1 })
-  assert.equal(checkers.view(fresh, 0).legal.length, 7)
-  assert.equal(checkers.view(fresh, 1).legal.length, 0)
-  assert.equal(checkers.view(fresh, null).legal.length, 0)
-  assert.match(checkers.action(fresh, 1, { type: "move", path: [40, 33] }).error, /isn't your turn/)
-  const offered = checkers.action(fresh, 1, { type: "draw", answer: "offer" })
-  assert.equal(checkers.view(offered, 0).drawOffer, "them")
-  assert.equal(checkers.bot(offered, 0, { random }).answer, "decline")
-  assert.deepEqual(checkers.isOver(checkers.action(fresh, 0, { type: "resign" })).winners, [1])
-})
-
 // ---------- over real sockets, through Network Neighborhood ----------
 
 let ioClient = null
 try {
-  ioClient = require(path.join(__dirname, "../../../client/node_modules/socket.io-client"))
+  ioClient = require("socket.io-client")
 } catch {
   ioClient = null
 }

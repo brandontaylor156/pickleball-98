@@ -3,9 +3,9 @@
 // office, your home), the warehouse club and the mall (a cart, samples, the register), your Bag
 // (eat and drink, put things down, ride your own bike, paddles/balls/clothes into the Locker Room,
 // gifts). The open world's own pieces are in client/src/roam/life/ and roam/ui/; this hook is the
-// page's glue (it knows 98 Messenger, the couple, the chip bank, Pickleball's prefs).
+// page's glue (it knows your player name, the chip bank, Pickleball's prefs).
 //
-// useExploreLife({ engineRef, roamWorld, labelsEl, mobile, aim, partner, flash, setPrefs, prefsRef,
+// useExploreLife({ engineRef, roamWorld, labelsEl, mobile, player, flash, setPrefs, prefsRef,
 //   hopTo }) -> { inside, insideHud, hudProps, phoneLife, overlays, onTownEvent }
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
@@ -18,12 +18,11 @@ import { AISLES, MALL_SHOPS, STORES, applyCart, checkoutSplit, itemOf } from "..
 import { CheckoutSheet, DeskGame, GiftSheet, InviteSheet, ShopSheet, SocialButtons, SocialLayer } from "../../../roam/ui/LifeHud.jsx"
 import { characterLook, validateLook } from "./locker.js"
 
-const nameKey = (n) => String(n || "").replace(/\s+/g, "").toLowerCase()
 const MALL_COLORS = { threads: "#ef476f", court: "#2a9d8f", kicks: "#111111", sweets: "#ff9ec7", sparkle: "#9d4edd", arcade: "#5c2a9d" }
 let uidN = 0
 const uid = () => `${Date.now().toString(36)}${(++uidN).toString(36)}`.slice(-12)
 
-export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, aim, partner = null, flash, setPrefs, prefsRef, hopTo, closePhone = null }) => {
+export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, player = null, flash, setPrefs, prefsRef, hopTo, closePhone = null }) => {
   const closePhoneRef = useRef(closePhone)
   closePhoneRef.current = closePhone
   const [socialState, setSocialState] = useState(null)
@@ -38,18 +37,11 @@ export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, aim, p
   const insideRef = useRef(null)
   const cartRef = useRef([])
   cartRef.current = cart
-  const aimRef = useRef(aim)
-  aimRef.current = aim
-  const partnerRef = useRef(partner)
-  partnerRef.current = partner
-  const friends = () => {
-    const out = new Set()
-    for (const g of aimRef.current?.me?.groups || []) for (const b of g.buddies || []) out.add(nameKey(b))
-    if (partnerRef.current) out.add(nameKey(partnerRef.current))
-    out.delete("smarterchild")
-    return out
-  }
-  const meName = () => aimRef.current?.me?.screenName || roamWorld?.host?.me?.name || "You"
+  const playerRef = useRef(player)
+  playerRef.current = player
+  // (no friends list in the standalone game: doing things together asks anyone near you)
+  const friends = () => new Set()
+  const meName = () => playerRef.current?.name || roamWorld?.host?.me?.name || "You"
 
   // ---- social + eating ride with whichever world is showing ----
   const attachTo = (world) => {
@@ -175,7 +167,7 @@ export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, aim, p
     if (ev.type === "enter") enter({ kind: ev.kind, place: ev.place, store: ev.store })
     else if (ev.type === "knock") {
       const m = roamWorld?.host?.messages
-      if (!m) return flash?.("Sign on to 98 Messenger to knock.")
+      if (!m) return flash?.(`You knocked. Nobody's answering: ${ev.place.ownerName} can invite you in when they're here.`)
       m.send(ev.place.ownerName, "Knock knock! 🏠 I'm at your door in Explore. Invite me in?").then((r) => flash?.(r.ok ? `You knocked. ${ev.place.ownerName} can invite you in.` : r.error))
     } else if (ev.type === "pickedUp") {
       const id = Object.entries({ grill: "grill", cooler: "cooler", umbrella: "umbrella", chairs: "chairs", float: "floatie", blanket: "blanket" }).find(([k]) => k === ev.kind)?.[1]
@@ -196,14 +188,7 @@ export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, aim, p
     }
     if (ev.type === "clock") return flash?.(ev.on ? `Clocked in at ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Have a good shift!` : (life?.work(ev.secs), `Clocked out: ${Math.max(1, Math.round(ev.secs / 60))} min worked.`))
     if (ev.type === "desk") return setSheet({ kind: "desk" })
-    if (ev.type === "tv") {
-      if (w?.layout?.kind === "home" && ev.on) {
-        const with_ = partnerRef.current || null
-        aimRef.current?.openTogether?.(with_ ? { with: with_ } : {})
-        return flash?.("Watch Together is open: pick something to watch on the couch.")
-      }
-      return flash?.(ev.on ? "The TV's on: this week's slides." : "TV off.")
-    }
+    if (ev.type === "tv") return flash?.(ev.on ? "The TV's on: this week's slides." : "TV off.")
     if (ev.type === "shop") return setSheet({ kind: "shop", store: ev.store, aisle: ev.aisle ? AISLES.find((a) => a.id === ev.aisle)?.name : null, aisleId: ev.aisle || null })
     if (ev.type === "checkout") return setSheet({ kind: "checkout" })
     if (ev.type === "claw") return claw()

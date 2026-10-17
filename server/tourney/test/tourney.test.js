@@ -14,7 +14,7 @@ const start = async ({ blocked = {} } = {}) => {
   const pushed = []
   let t = Date.UTC(2026, 9, 9, 19)
   const sessions = new Map(Object.keys(NAMES).map((key) => [key, { key, token: TOKENS[key], user: { screenName: NAMES[key], blocked: blocked[key] || [] }, socket: { emit: (event, payload) => emitted.push({ to: key, event, payload }) } }]))
-  const aim = { sessions, store: { find: async (key) => (NAMES[key] ? { screenName: NAMES[key], blocked: blocked[key] || [] } : null) } }
+  const aim = { sessions, authenticate: async (token) => [...sessions.values()].find((s) => s.token === token) || null, store: { find: async (key) => (NAMES[key] ? { screenName: NAMES[key], blocked: blocked[key] || [] } : null) } }
   const push = { notify: async (key, category, message) => (pushed.push({ key, category, message }), { sent: 1 }) }
   const store = memoryStore()
   const tourneys = createTourneys({ aim: () => aim, store, push, now: () => t })

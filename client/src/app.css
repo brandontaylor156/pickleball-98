@@ -1,0 +1,152 @@
+/* Pickleball 98, standalone: the game in one full-screen 98 window (App.jsx) */
+
+.pkApp {
+  background: #008080;
+}
+
+/* on a computer: the window fills the page, a little teal round it on big screens */
+.pkAppFrame {
+  position: absolute;
+  inset: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+@media (min-width: 1100px) and (min-height: 760px) {
+  .pkApp:not(.os-mobile) .pkAppFrame {
+    padding: 12px;
+  }
+}
+
+.pkAppWin {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* (Pickleball.css sizes the game for a 98ish window body: here it takes what's left under
+   the title bar) */
+.pkAppWin > .pkRoot {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.pkAppWin > .title-bar .title-bar-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.pkAppControls {
+  align-items: center;
+  gap: 2px;
+}
+.pkAppControls .pkPlayerBtn {
+  min-width: 0;
+  min-height: 14px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 12px;
+  color: #222;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-image: none;
+}
+.os-mobile .pkAppControls .pkPlayerBtn {
+  min-height: 24px;
+  line-height: 22px;
+}
+
+.pkAppLoading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Pixelated MS Sans Serif", Arial, sans-serif;
+  font-size: 11px;
+}
+
+/* ---- the name dialog (PlayerGate.jsx) and notices (Notices.jsx) ---- */
+
+.pkGateBack,
+.pkNoticeBack {
+  position: fixed;
+  inset: 0;
+  z-index: 99999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.pkGate {
+  width: min(420px, 100%);
+  height: auto; /* (main.css gives windows the full height of their box) */
+  min-width: 0;
+}
+.pkNotice {
+  width: min(360px, 100%);
+  height: auto;
+  min-width: 0;
+}
+.pkGateBody,
+.pkNoticeBody {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.pkGateBody p,
+.pkNoticeBody p {
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+.pkGateField {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.pkGateField input {
+  width: 100%;
+}
+.pkGateRule {
+  color: #444;
+  margin-top: 4px !important;
+}
+.pkGateError {
+  color: #a00000;
+}
+.pkGateButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+.os-mobile .pkGateButtons button {
+  min-height: 36px;
+}
+.os-mobile .pkGate input[type="text"] {
+  font-size: 16px; /* iOS zooms into anything smaller */
+  height: 32px;
+}
+
+.pkNoticeIcon {
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: bold 20px serif;
+  color: #fff;
+  background: #0000c0;
+  box-shadow: 1px 1px #000;
+}
+.pkNoticeIcon.is-warn {
+  border-radius: 0;
+  background: #e0c000;
+  color: #000;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  padding-top: 8px;
+}

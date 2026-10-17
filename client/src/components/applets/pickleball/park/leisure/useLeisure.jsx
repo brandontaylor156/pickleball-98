@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import MoreOptions from "../../../../shared/MoreOptions"
 import { useNet } from "../../../network/NetContext"
-import { unlock } from "../../../../../utils/achievements"
-import { getBank, formatChips } from "../../../casino/bank.js"
+import { getBank, formatChips } from "../../../../../utils/bank.js"
 import { costOf, itemById, itemName, menuFor, pay, sip as sipOnce, startHolding, verbFor } from "./menu.js"
 import { fmtTime, lapLengths } from "./swimRun.js"
 import { tubPair } from "./tubRun.js"
@@ -16,7 +15,7 @@ import "./leisure.css"
 // the context button: Sip / Bite). With your partner or a buddy near you: swim together or race,
 // the hot tub side by side, a treat bought for them (Together's ask: server/park/together.js).
 //
-// useLeisure({ world, prefs, setPrefs, mobile, showPad, padSide, aim, onDrive })
+// useLeisure({ world, prefs, setPrefs, mobile, showPad, padSide, player, onDrive })
 //   -> { onEvent(ev) -> handled?, overlays, chip, running, sheetOpen }
 
 export const SUNDOWNER = { name: "Sundowner GT", key: "roam.unlocks" }
@@ -38,7 +37,7 @@ export const writeRoamUnlock = (id, at = Date.now()) => {
 // a pool's best time key: venue + pool
 const bestKey = (world, spot) => `${world?.venue || world?.layout?.id || "park"}:${spot.id}`
 
-export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = false, padSide = "left", aim = null, onDrive = null }) => {
+export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = false, padSide = "left", player = null, onDrive = null }) => {
   const net = useNet()
   const [sheet, setSheet] = useState(null) // { spot, pal }
   const [both, setBoth] = useState(false) // (buy one for the friend near you too)
@@ -73,7 +72,7 @@ export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = f
   useEffect(() => {
     world?.setFinds?.(prefs.parkFinds || {})
   }, [world, prefs.parkFinds])
-  const signedOn = aim?.status === "online"
+  const signedOn = !!player
   useEffect(() => {
     if (!world || !signedOn || !net?.request) return
     let live = true
@@ -166,7 +165,6 @@ export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = f
           },
           onSplash: () => {
             net?.request?.("park:fx", { emote: "splash" })
-            unlock("park-cannonball")
           },
         })
       } else if (spot.kind === "tub") {
@@ -245,7 +243,6 @@ export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = f
         if (fresh) f.keys = { at: Date.now(), venue: ev.venue || null }
         setPrefs({ parkFinds: f })
         writeRoamUnlock("sundowner")
-        unlock("park-keys")
         if (signedOn) net?.request?.("park:find", { id: "keys", venue: ev.venue || null })
         setKeys({ from: ev.from || "Vince", fresh })
         return true

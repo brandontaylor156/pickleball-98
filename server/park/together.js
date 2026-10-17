@@ -28,8 +28,8 @@
 //            a race's times go round as park:fx { lap }
 //
 // Only states go over the network (who's linked to whom, what started): the walking itself is
-// each browser's own position updates, as always. Signed-on people only (a 98 Messenger
-// account on both sides), never between people who block each other, and only within a few
+// each browser's own position updates, as always. Players with a name only (on both
+// sides), never between people who block each other, and only within a few
 // metres for the close-up things.
 //
 // Socket events (client -> server, with an ack):
@@ -133,7 +133,7 @@ const createTogether = ({ send, toAll, blocked = () => false, clock, limit, star
     const p = inst.people.get(pid)
     const q = Number.isInteger(to) ? byNum(inst, to) : null
     if (!p || !q || q.pid === pid) return { ok: false, error: "They're not in the park any more." }
-    if (!p.key || !q.key) return { ok: false, error: "Doing things together needs both of you signed on to 98 Messenger." }
+    if (!p.key || !q.key) return { ok: false, error: "Doing things together needs both of you to pick a player name." }
     if (blocked(pid, q.pid)) return { ok: false, error: "They're not in the park any more." }
     if (busy(p) || busy(q)) return { ok: false, error: `${q.name} is playing a game right now.` }
     if (distOf(p, q) > k.near) return { ok: false, error: `Walk over to ${q.name} first.` }

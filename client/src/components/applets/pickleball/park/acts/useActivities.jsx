@@ -14,7 +14,7 @@ import "./acts.css"
 // My Park > Together (server/park/together.js kinds tennis / horse / workout); a yes makes a
 // private "parkact" room (server/arcade/games/parkact.js) and both screens start together.
 //
-// useActivities({ world, prefs, setPrefs, aim, mobile, showPad, padSide, onWatchLive })
+// useActivities({ world, prefs, setPrefs, mobile, showPad, padSide, onWatchLive })
 //   -> { onEvent(ev) -> handled?, overlays, running }
 
 const LEVELS = [
@@ -69,14 +69,13 @@ export const sheetFor = (spot, { pal = null, stats = {}, move = "squat" } = {}) 
       items: [
         { id: "live", icon: "📡", label: "Live courts", sub: "A friend's game, live" },
         { id: "videos", icon: "🎞", label: "My videos", sub: "Your highlight reels" },
-        ...(pal ? [{ id: "together", icon: "💞", label: `YouTube with ${pal.name}`, sub: "Watch Together" }] : [{ id: "youtube", icon: "▶", label: "YouTube", sub: "Watch Together" }]),
       ],
       hint: null,
     }
   return null
 }
 
-export const useActivities = ({ world, prefs, setPrefs, aim, mobile = false, showPad = false, padSide = "left", onWatchLive = null }) => {
+export const useActivities = ({ world, prefs, setPrefs, mobile = false, showPad = false, padSide = "left", onWatchLive = null }) => {
   const net = useNet()
   const [sheet, setSheet] = useState(null) // { spot, pal }
   const [run, setRun] = useState(null) // the running activity's object
@@ -170,7 +169,7 @@ export const useActivities = ({ world, prefs, setPrefs, aim, mobile = false, sho
         const { createTvRun } = await import("./tvRun.js")
         // (who's live right now, anywhere: Live Broadcast's list)
         const got = await Promise.race([net?.request?.("bc:list", {}), new Promise((res) => setTimeout(() => res(null), 4000))]).catch(() => null)
-        r = createTvRun({ spot, channel: opts.channel || "live", live: got?.ok ? got.live || [] : [], pal: opts.pal || null, signedOn: aim?.status === "online", venueName: (id) => VENUE_LIST.find((v) => v.id === id)?.short || "Another venue" })
+        r = createTvRun({ spot, channel: opts.channel || "live", live: got?.ok ? got.live || [] : [], venueName: (id) => VENUE_LIST.find((v) => v.id === id)?.short || "Another venue" })
       }
     } catch (e) {
       console.error(e)
@@ -209,11 +208,6 @@ export const useActivities = ({ world, prefs, setPrefs, aim, mobile = false, sho
     setHud(null)
   }
 
-  const openTogether = (pal) => {
-    if (aim?.status !== "online" || !aim?.openTogether) return say("Watch Together needs 98 Messenger. Sign on first.")
-    aim.openTogether(pal ? { with: pal.name } : {})
-  }
-
   // ---- the sheet's choices ----
   const choose = async (item) => {
     const s = sheet
@@ -231,9 +225,7 @@ export const useActivities = ({ world, prefs, setPrefs, aim, mobile = false, sho
     }
     if (spot.kind === "tv") {
       setSheet(null)
-      // (YouTube together: Watch Together's own window, with the friend by you; the TV waits on it)
-      if (item.id === "together" || item.id === "youtube") openTogether(s.pal)
-      return startRun(spot, { channel: item.id === "youtube" ? "together" : item.id, pal: s.pal })
+      return startRun(spot, { channel: item.id })
     }
     startRun(spot, { mode: item.id, camera: !!s.camera })
   }
@@ -335,7 +327,6 @@ export const useActivities = ({ world, prefs, setPrefs, aim, mobile = false, sho
               stopRun(true)
               onWatchLive?.(it)
             },
-            together: () => openTogether(run.pal || null),
           }}
         />
       )}

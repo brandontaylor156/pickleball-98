@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react"
-import { Select } from "../../shared/select/Combo"
 import MenuBar from "../../shared/MenuBar"
 import Dialog from "../../shared/Dialog"
 import { helpItem } from "../../../utils/help"
-import { keyOf, useAim } from "../aim/AimContext"
+import { nameKey, usePlayer } from "../../../utils/player"
 import * as core from "./clubCore"
 import * as club from "../../../utils/pbclub"
 import Scorekeeper from "./Scorekeeper"
@@ -15,7 +14,7 @@ import "./PbClub.css"
 import { useNet } from "../network/NetContext"
 import { openMaps } from "../../../utils/maps"
 
-// Live Broadcast (Pickleball 98's twin/live): "Go Live" from the fence, and your buddies'
+// Live Broadcast (Pickleball 98's twin/live): "Go Live" from the fence, and other players'
 // games that are live right now (server/broadcast bc:list, refreshed and on bc:live)
 const LiveCard = ({ onLive, onWatch }) => {
   const net = useNet()
@@ -67,53 +66,7 @@ const TABS = [
   ["ladder", "Ladder"],
 ]
 
-const MeetDialog = ({ venue, buddies, onClose, send }) => {
-  const [who, setWho] = useState(buddies[0]?.name || "")
-  const [when, setWhen] = useState("now")
-  const [msg, setMsg] = useState(null)
-  const links = core.mapsLinks({ id: venue.id })
-  const text = `Meet me at ${venue.name}${when === "now" ? " now" : when === "soon" ? " in 30 minutes" : " later today"}? 🏓 ${venue.address} ${links.apple}`
-  return (
-    <Dialog
-      title={`Meet Me at ${venue.short}`}
-      okLabel="Send IM"
-      okDisabled={!who}
-      onCancel={onClose}
-      onOk={async () => {
-        const r = await send(who, text)
-        if (r?.ok === false) setMsg(r.error || "Couldn't send.")
-        else onClose()
-      }}
-    >
-      <div className="pbEditor">
-        <label>
-          To
-          <Select value={who} onChange={(e) => setWho(e.target.value)} data-meet-to>
-            {buddies.map((b) => (
-              <option key={b.k} value={b.name}>
-                {b.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label>
-          When
-          <Select value={when} onChange={(e) => setWhen(e.target.value)}>
-            <option value="now">Now</option>
-            <option value="soon">In 30 minutes</option>
-            <option value="later">Later today</option>
-          </Select>
-        </label>
-        <p className="pbNote" data-selectable>
-          {text}
-        </p>
-        {msg && <p className="pbError">{msg}</p>}
-      </div>
-    </Dialog>
-  )
-}
-
-const CourtsList = ({ onPlan, onMeet, canMeet, canPlan }) => (
+const CourtsList = ({ onPlan, canPlan }) => (
   <ul className="pbList pbVenues" data-venues>
     {core.VENUES.map((v) => {
       return (
@@ -128,18 +81,13 @@ const CourtsList = ({ onPlan, onMeet, canMeet, canPlan }) => (
             {v.address}
           </div>
           <div className="pbButtons">
-            {/* Maps 98 (utils/maps.js): directions from where you are, inside 98ish */}
+            {/* your maps app (utils/maps.js): directions from where you are */}
             <button type="button" onClick={() => openMaps({ name: v.name, lat: v.lat, lon: v.lon, address: v.address, directions: true })} data-directions={v.id}>
               Directions
             </button>
             {canPlan && (
               <button type="button" onClick={() => onPlan(v.id)}>
                 Plan
-              </button>
-            )}
-            {canMeet && (
-              <button type="button" onClick={() => onMeet(v)} data-meet={v.id}>
-                Meet Me Here
               </button>
             )}
           </div>
@@ -150,28 +98,25 @@ const CourtsList = ({ onPlan, onMeet, canMeet, canPlan }) => (
 )
 
 const PbClub = ({ mobile, handoff, onClose, embedded = false, onTwin = null, onLive = null, onWatch = null, onCoach = null, onTourneyPlay = null }) => {
-  const aim = useAim()
+  const player = usePlayer()
   const state = club.useClub()
   const [tab, setTab] = useState("play")
   const [open, setOpen] = useState(null) // session id
   const [editing, setEditing] = useState(null) // { session } | { venueId }
   const [prefill, setPrefill] = useState(null)
   const [focusMatch, setFocusMatch] = useState(null)
-  const [meet, setMeet] = useState(null)
   const [about, setAbout] = useState(false)
   const [tourneyFocus, setTourneyFocus] = useState(null)
 
-  const online = aim?.status === "online"
-  const myName = aim?.me?.screenName || ""
-  const meKey = state.me || (online ? keyOf(myName) : null)
+  const online = !!player
+  const myName = player?.name || ""
+  const meKey = state.me || (online ? nameKey(myName) : null)
+  // the people you've played or planned with (anyone else: add them by player name)
   const buddies = useMemo(() => {
-    const seen = new Set()
     const out = []
-    for (const g of aim?.me?.groups || []) for (const b of g.buddies || []) if (!seen.has(keyOf(b)) && keyOf(b) !== meKey && keyOf(b) !== "smarterchild") seen.add(keyOf(b)), out.push({ k: keyOf(b), name: b })
-    // and people you've played with who aren't buddies
-    for (const [k, name] of Object.entries(state.names || {})) if (!seen.has(k) && k !== meKey && !(/^x[0-9a-f]{12}$/.test(k) && name === "Deleted player")) seen.add(k), out.push({ k, name })
+    for (const [k, name] of Object.entries(state.names || {})) if (k !== meKey && !(/^x[0-9a-f]{12}$/.test(k) && name === "Deleted player")) out.push({ k, name })
     return out.sort((a, b) => a.name.localeCompare(b.name))
-  }, [aim?.me?.groups, state.names, meKey])
+  }, [state.names, meKey])
   const people = useMemo(() => (meKey ? [{ k: meKey, name: `${myName || meKey} (you)` }, ...buddies] : buddies), [meKey, myName, buddies])
 
   // a deep link or notification: a session or a match to show
@@ -217,7 +162,7 @@ const PbClub = ({ mobile, handoff, onClose, embedded = false, onTwin = null, onL
 
   const signedOff = !online && (
     <p className="pbBannerInfo" data-signed-off>
-      Sign on to 98 Messenger to plan sessions and share matches with your group. The scorekeeper works without it (matches wait on this phone).
+      Pick a player name to plan sessions and share matches with your group. The scorekeeper works without one (matches wait on this device).
     </p>
   )
 
@@ -259,7 +204,7 @@ const PbClub = ({ mobile, handoff, onClose, embedded = false, onTwin = null, onL
         {online && <SessionList state={state} onOpen={setOpen} onNew={() => setEditing({})} />}
         {state.error && <p className="pbError">{state.error}</p>}
         <h4 className="pbH">Your courts</h4>
-        <CourtsList onPlan={(venueId) => setEditing({ venueId })} onMeet={setMeet} canPlan={online} canMeet={online && buddies.length > 0} />
+        <CourtsList onPlan={(venueId) => setEditing({ venueId })} canPlan={online} />
         <p className="pbMuted pbCredit">Directions open in Maps 98 (with a button there to hand off to Apple Maps).</p>
       </>
     )
@@ -308,7 +253,6 @@ const PbClub = ({ mobile, handoff, onClose, embedded = false, onTwin = null, onL
         <div className="pbBody">{body}</div>
       </div>
       {editing && <SessionEditor session={editing.session || null} venueId={editing.venueId} buddies={buddies} onClose={() => setEditing(null)} onSaved={(s) => s && setOpen(s.id)} />}
-      {meet && <MeetDialog venue={meet} buddies={buddies} onClose={() => setMeet(null)} send={(name, text) => aim.sendIm(name, text)} />}
       {about && (
         <Dialog title="About Real Games" onOk={() => setAbout(false)} onCancel={() => setAbout(false)}>
           <div className="pbAbout">

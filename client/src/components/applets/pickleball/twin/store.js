@@ -1,22 +1,11 @@
-// Twin Replay's saved games, on this device only: IndexedDB "98ish-twin" (+ "-<user id>" for
-// other profiles; deleted with the profile through the storage seam). Two stores:
+// Twin Replay's saved games, on this device only: IndexedDB "pk98-twin". Two stores:
 // - games: { id, title, created, duration, venue, court, taps, players (names/hands), analysis, thumb (small JPEG data URL), shared (from a friend: no video) }
 // - videos: the recording itself (a Blob), never uploaded anywhere
 // Limits: MAX_GAMES games; the oldest videos go first when the device says it's full.
 
-import { currentUserId, DEFAULT_ID, onUserRemoved } from "../../../../utils/users"
-
-const DB = "98ish-twin"
+const DB = "pk98-twin"
 export const MAX_GAMES = 40
-const dbName = (id = currentUserId()) => (!id || id === DEFAULT_ID ? DB : `${DB}-${id}`)
-
-onUserRemoved((id) => {
-  try {
-    if (typeof indexedDB !== "undefined" && id && id !== DEFAULT_ID) indexedDB.deleteDatabase(dbName(id))
-  } catch {
-    // gone
-  }
-})
+const dbName = () => DB
 
 let opening = null
 const openDb = () => {

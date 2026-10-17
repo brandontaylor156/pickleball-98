@@ -1,13 +1,12 @@
-// Roam's ONE door into 98ish (docs/open-world.md "Architecture"). Everything else in
-// client/src/roam/ knows nothing about 98ish; a standalone app would replace this file with its
-// own host (a figure maker, a sky, a store, a connection) and keep the rest.
+// Roam's ONE door into Pickleball 98 (docs/open-world.md "Architecture"). Everything else in
+// client/src/roam/ knows nothing about the game around it; another app would replace this file
+// with its own host (a figure maker, a sky, a store, a connection) and keep the rest.
 //
-// What 98ish lends the open world:
-// - figures: Pickleball 98's athletes (your Locker Room look) walking with its animation;
+// What Pickleball 98 lends the open world:
+// - figures: its athletes (your Locker Room look) walking with its animation;
 // - the sky: My Park's Real Sky (true sun and weather for the town);
-// - the network: the shared 98ish connection (server/roam), with the account's name;
-// - voice: the spatial voice of My Park (utils/voice), same as in the park;
-// - a per-person store (98ish's per-user localStorage) for the finds.
+// - the network: the game's server connection (server/roam), with your player name;
+// - a store (this browser's localStorage) for the finds.
 
 import { useEffect, useRef, useState } from "react"
 import { createAnim, updateAnim, setMood, seatedPose, ridePose, stepRider } from "../components/applets/pickleball/anim.js"
@@ -64,7 +63,6 @@ const createHorn = () => {
 }
 import { parkLook } from "../components/applets/pickleball/park/regulars.js"
 import { useNet } from "../components/applets/network/NetContext"
-import { createVoiceSession, voiceSupported } from "../utils/voice/session.js"
 import { hashStr, rng } from "./sim/parked.js"
 
 // the walking situation anim.js wants for someone just walking about (My Park's walkSituation)
@@ -77,7 +75,7 @@ const walkSituation = (s, key, t, look) => {
 const NO_PADDLE = new Set(["hug", "hold", "dance", "twirl", "thumbs", "point"])
 
 // engineCtx: Pickleball's api.worldContext() ({ makeFigure, quality, renderer })
-export const makeHost98 = ({ engineCtx, me = {}, sky = { real: true, mode: "real" }, aim = null, phone = false, towns = null, travel = null, equip = null } = {}) => {
+export const makeHost98 = ({ engineCtx, me = {}, sky = { real: true, mode: "real" }, phone = false, towns = null, travel = null, equip = null } = {}) => {
   const quality = engineCtx?.quality || "medium"
   let n = 0
   const store = {
@@ -110,45 +108,16 @@ export const makeHost98 = ({ engineCtx, me = {}, sky = { real: true, mode: "real
     together: togetherRules,
     // what a person can hold to eat or drink (My Park's leisure items: name, food or drink, sips)
     heldItems: LEISURE_ITEMS,
-    // your Home/Work places, the Bag, gifts and the chip bank (utils/roamLife.js: on your 98
-    // Messenger account, or this device when signed off), Pickleball 98's Locker Room, and going
+    // your Home/Work places, the Bag, gifts and the chip bank (utils/roamLife.js: on your
+    // player name, or this device without one), Pickleball 98's Locker Room, and going
     // to another town (the page: travel(townId, at))
     life: createLife98({ travel, equip }),
     // the other towns (the train between them): [{ id, name, station }]
     towns: () => (towns ? Object.values(towns).map((t) => ({ id: t.id, name: t.name, station: t.station || null })) : []),
-    // the in-game phone's Messages: 98 Messenger (your buddies, and a quick message to one)
-    messages: aim
-      ? (() => {
-          const A = () => (typeof aim === "function" ? aim() : aim) || {}
-          return {
-          me: () => A().me?.screenName || "",
-          // buddies, online first -> [{ name, online }]
-          buddies: () => {
-            const seen = new Set()
-            const out = []
-            const meKey = (A().me?.screenName || "").toLowerCase()
-            for (const g of A().me?.groups || [])
-              for (const b of g.buddies || []) {
-                const k = String(b).toLowerCase().replace(/\s+/g, "")
-                if (seen.has(k) || k === meKey.replace(/\s+/g, "") || k === "smarterchild") continue
-                seen.add(k)
-                out.push({ name: b, online: !!A().presence?.[k]?.online })
-              }
-            return out.sort((a, b) => b.online - a.online || a.name.localeCompare(b.name))
-          },
-          send: async (name, text) => {
-            try {
-              const r = await A().sendIm(name, text)
-              return r?.ok === false ? { ok: false, error: r.error || "Not sent." } : { ok: true }
-            } catch (e) {
-              return { ok: false, error: e?.message || "Not sent." }
-            }
-          },
-          }
-        })()
-      : null,
+    // the in-game phone's Messages (none here: Pickleball 98 has no messenger)
+    messages: null,
     // the in-game phone's Camera: what the world shows now (or a selfie: the world's own lens turned
-    // round to face you) saved to My Pictures (Photos)
+    // round to face you), downloaded as a .jpg
     camera: engineCtx?.renderer
       ? {
           shoot: async (world, { selfie = false, place = "" } = {}) => {
@@ -163,12 +132,14 @@ export const makeHost98 = ({ engineCtx, me = {}, sky = { real: true, mode: "real
               world.photoLens?.(null)
             }
             if (!url || url.length < 1000) return { ok: false, error: "The picture didn't come out." }
-            const lib = await import("../components/applets/photos/library.js")
             const now = new Date()
             const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}.${String(now.getMinutes()).padStart(2, "0")}.${String(now.getSeconds()).padStart(2, "0")}`
             const name = `${selfie ? "Selfie" : "Photo"} in ${place || "town"} ${stamp}.jpg`.replace(/[\\/:*?"<>|]/g, "")
-            const res = await lib.savePicture(lib.picturesFolder(), name, url)
-            return res.ok ? { ok: true, name, url } : { ok: false, error: res.error || "Couldn't save it." }
+            const a = document.createElement("a")
+            a.href = url
+            a.download = name
+            a.click()
+            return { ok: true, name, url }
           },
         }
       : null,
@@ -323,7 +294,7 @@ export const makeHost98 = ({ engineCtx, me = {}, sky = { real: true, mode: "real
   }
 }
 
-// Roam online over 98ish's shared connection (server/roam): joins the town while you're in it
+// Roam online over the game's server connection (server/roam): joins the town while you're in it
 // and passes everything to the world (setNet / netJoined / netEvent). -> { joined, n, people, error }
 const EVENTS = ["roam:m", "roam:person", "roam:gone", "roam:car", "roam:ride", "roam:seat", "roam:hop",
   // (going inside, emotes, things put down, doing things together: server/roam/inside.js and
@@ -366,48 +337,6 @@ export const useRoamNet = ({ world, active, look }) => {
   return state
 }
 
-// spatial voice in the town (the same voice as My Park; signaling through server/roam)
-export const useRoamVoice = ({ world, joined, n }) => {
-  const net = useNet()
-  const socket = net?.socket
-  const [state, setState] = useState({ status: "off", peers: {}, on: [] })
-  const sessionRef = useRef(null)
-  useEffect(() => {
-    if (!world || !joined || !socket) return
-    const space = {
-      get me() {
-        return world.voicePlace().me
-      },
-      mode: "world",
-      join: (on) => net.request("roam:vc", { on }),
-      send: (to, kind, data) => net.request("roam:sig", { to, kind, data }),
-      listen: (onList, onSignal) => {
-        const list = (d) => onList(d?.on || [])
-        const sig = (d) => d && onSignal(d.from, d.kind, d.data)
-        socket.on("roam:vc", list)
-        socket.on("roam:sig", sig)
-        return () => {
-          socket.off("roam:vc", list)
-          socket.off("roam:sig", sig)
-        }
-      },
-      place: () => world.voicePlace(),
-    }
-    const session = createVoiceSession({ space })
-    sessionRef.current = session
-    const off = session.subscribe((s) => setState(s))
-    return () => {
-      off()
-      session.stop()
-      sessionRef.current = null
-      setState({ status: "off", peers: {}, on: [] })
-    }
-  }, [world, joined, n, socket])
-  const toggle = () => {
-    const s = sessionRef.current
-    if (!s) return
-    if (s.state.status === "on" || s.state.status === "starting" || s.state.status === "paused") s.stop()
-    else s.start()
-  }
-  return { supported: voiceSupported() && !!joined, state, toggle, session: sessionRef.current }
-}
+// spatial voice in the town: not in the standalone game (voice chat was 98ish's)
+const NO_VOICE = { status: "off", peers: {}, on: [] }
+export const useRoamVoice = () => ({ supported: false, state: NO_VOICE, toggle: () => {}, session: null })

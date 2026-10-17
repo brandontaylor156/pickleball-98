@@ -73,7 +73,7 @@ export const OnlinePeople = ({ onInvite, exclude = [], disabled = false, emptyTe
     setSent((s) => ({ ...s, [c.id]: result.ok ? { text: "Invited!" } : { text: result.error, error: true } }))
   }
   if (!others.length) {
-    return <p className="olMuted olEmpty">{emptyText || "Nobody else is online right now. Share the room code with a friend, or open 98ish in another window to try it yourself."}</p>
+    return <p className="olMuted olEmpty">{emptyText || "Nobody else is online right now. Share the room code with a friend, or open Pickleball 98 in another window to try it yourself."}</p>
   }
   return (
     <ul className="olPeople">
@@ -82,7 +82,7 @@ export const OnlinePeople = ({ onInvite, exclude = [], disabled = false, emptyTe
           <span className="olPerson">
             <b>{c.name}</b>
             <small>
-              {c.user ? "98 Messenger" : "guest"}
+              {c.user ? "player" : "guest"}
               {c.device === "phone" ? ", on a phone" : ""}
               {c.busy ? ", playing a game" : ""}
             </small>

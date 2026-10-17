@@ -7,7 +7,7 @@ import { LEVELS } from "../ai.js"
 import { LEVEL_NAMES } from "../menus.jsx"
 import { TIMES, nightOk, timeAt } from "../park/timeofday.js"
 import { placeLists, placeNote, placeText } from "./places.js"
-import { placeDirections } from "./meet.js"
+import { placeDirections } from "./directions.js"
 import { openMaps } from "../../../../utils/maps"
 import "./play.css"
 

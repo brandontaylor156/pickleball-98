@@ -119,7 +119,7 @@ export function PlacesApp({ world, life, onClose }) {
       {own && sharing === p.id && (
         <span className="rlfShareList">
           {!L.signedOn() ? (
-            <small>Sign on to 98 Messenger to share a place.</small>
+            <small>Pick a player name to keep your places.</small>
           ) : buddies.length ? (
             buddies.slice(0, 10).map((b) => {
               const on = (p.shared || []).includes(b.name.replace(/\s+/g, "").toLowerCase())
@@ -131,7 +131,7 @@ export function PlacesApp({ world, life, onClose }) {
               )
             })
           ) : (
-            <small>Add a buddy in 98 Messenger first.</small>
+            <small>Sharing places with other players isn't available yet.</small>
           )}
           <small>Only the buddies ticked here see it, as "{sharedLabel(L.me() || "You", p)}".</small>
         </span>
@@ -154,7 +154,7 @@ export function PlacesApp({ world, life, onClose }) {
           {has("work") ? "Move Work here" : "Set Work here"}
         </button>
       </div>
-      <small className="rphNote">Private: only you see your places, unless you share one with a buddy. {L.signedOn() ? "Kept on your account." : "Kept on this device (sign on to keep them on your account)."}</small>
+      <small className="rphNote">Private: only you see your places. {L.signedOn() ? "Kept with your player name." : "Kept on this device (pick a player name to keep them on the server)."}</small>
       {msg && <div className="rphMsg" data-life="places-msg">{msg}</div>}
     </div>
   )

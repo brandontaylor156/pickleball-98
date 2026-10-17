@@ -5,7 +5,7 @@ import * as core from "../components/applets/pbclub/clubCore.js"
 // applets/pbclub/clubCore.js). Outside React so the live notices (PbClubBridge) and the app
 // share it.
 //
-//   setClubSession({ token, screenName } | null)   from AimContext (signing on/off)
+//   setClubSession({ token, screenName } | null)   from App.jsx (the player name, or none)
 //   useClub() -> { status, error, me, sessions, matches, ladder, names, outbox, season }
 //   refresh(), logMatch(match) (queued on this device while offline or signed off, sent
 //   later), act(id, act), saveSession(session, { id, invite }), rsvp(id, s, late),
@@ -57,7 +57,7 @@ export const getPrefs = () => ({ voice: true, format: "doubles", scoring: "sideo
 export const setPrefs = (patch) => write(PREFS, { ...getPrefs(), ...patch })
 
 const api = async (path, body) => {
-  if (!session) return { ok: false, offline: true, error: "Sign on to 98 Messenger to share with your group." }
+  if (!session) return { ok: false, offline: true, error: "Pick a player name to share with your group." }
   try {
     const response = await fetch(`${SERVER_URL}/api/pbclub${path}`, {
       method: "POST",
@@ -67,7 +67,7 @@ const api = async (path, body) => {
     const json = await response.json().catch(() => ({ ok: false, error: `The server had a problem (${response.status}).` }))
     return { ...json, status: response.status }
   } catch {
-    return { ok: false, offline: true, error: "Couldn't reach the 98ish server. Saved on this phone; it goes up when you're back online." }
+    return { ok: false, offline: true, error: "Couldn't reach the Pickleball 98 server. Saved on this phone; it goes up when you're back online." }
   }
 }
 

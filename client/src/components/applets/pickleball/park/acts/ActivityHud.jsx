@@ -242,11 +242,6 @@ const TvHud = ({ run, hud, onLeave, actions }) => (
               ))}
             </ul>
           ) : null}
-          {hud.channel === "together" && (
-            <button type="button" className="pkPrimary" onClick={() => actions.together?.()} data-act="tv-open-together">
-              Open Watch Together
-            </button>
-          )}
         </div>
       )}
       <div className="pkActTvRow" role="tablist" aria-label="Channels">

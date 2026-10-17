@@ -10,7 +10,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import MoreOptions from "../../../../shared/MoreOptions"
 import { Select } from "../../../../shared/select/Combo"
 import { useNet } from "../../../network/NetContext"
-import { useAim } from "../../../aim/AimContext"
+import { usePlayer } from "../../../../../utils/player"
 import { shareOut } from "../../../../../utils/share"
 import { Calibrate } from "../Calibrate"
 import { courtsOf, venueChoices } from "../venues.js"
@@ -26,8 +26,8 @@ const DOTS = ["#3c8cff", "#29c46b", "#ff8a2a", "#e84fd0"]
 
 export default function GoLive({ onExit, onOpenTwin = null }) {
   const net = useNet()
-  const aim = useAim()
-  const myName = aim?.me?.screenName || ""
+  const player = usePlayer()
+  const myName = player?.name || ""
   const [step, setStep] = useState("setup")
   const [venue, setVenue] = useState(venueChoices().find((v) => v.real)?.id || "stadium")
   const [courts, setCourts] = useState([])
@@ -35,7 +35,7 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
   const [title, setTitle] = useState("")
   const [players, setPlayers] = useState(4)
   const [names, setNames] = useState(() => [myName || "Me", "", "", ""])
-  const [notify, setNotify] = useState(true)
+  const notify = false // no buddies to tell in Pickleball 98: watching is by link
   const [error, setError] = useState(null)
   const [status, setStatusState] = useState("")
   const setStatus = (s) => {
@@ -107,7 +107,7 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
     setTaps(t)
     setPlayers(p)
     setError(null)
-    if (!online) return setError("Going live needs the network: sign on to 98 Messenger (your buddies are the ones told).")
+    if (!online) return setError("Going live needs a player name and the server: pick a name first.")
     const list = Array.from({ length: p }, (_, i) => roster[i] || { name: `Player ${i + 1}`, team: i < p / 2 ? 0 : 1 })
     const r = await net.request("bc:start", { title: title.trim() || `${myName || "A"} game at ${venueName}`, venue, court, venueName, courtName, players: list, notify })
     if (!r?.ok) return setError(r?.error || "Couldn't go live.")
@@ -308,11 +308,7 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
                 <span>Title</span>
                 <input type="text" maxLength={60} value={title} placeholder={`Game at ${venueName}`} onChange={(e) => setTitle(e.target.value)} />
               </label>
-              <label className="pkCloneCheck">
-                <input id="pk-live-notify" type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-                <label htmlFor="pk-live-notify">Tell my buddies I'm live</label>
-              </label>
-              <p className="pkMuted">Your buddies can watch (and anyone you send the link to). Nothing is recorded on the server; the game is kept on this phone afterwards as a Twin Replay.</p>
+              <p className="pkMuted">Anyone you send the link to can watch. Nothing is recorded on the server; the game is kept on this phone afterwards as a Twin Replay.</p>
             </MoreOptions>
             {error && <p className="pkTwinError">{error}</p>}
             <div className="pkTwinButtons">

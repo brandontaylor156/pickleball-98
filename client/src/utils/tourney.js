@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react"
 // schedule are applets/pbclub/tourneyCore.js). Outside React so the live notices
 // (PbClubBridge), Real Games' Tournaments tab, My Park and the Locker Room share it.
 //
-//   setTourneySession({ token, screenName } | null)   from AimContext
+//   setTourneySession({ token, screenName } | null)   from App.jsx (the player name)
 //   useTourneys() -> { status, error, me, events: [summary], trophies, docs: { id: record }, now }
 //   refresh(), open(id) (the full record), enter(id, div, partner), withdraw(id),
 //   answer(id, accept), here(id, match), room(id, match, code), report(id, match, score)
@@ -46,12 +46,12 @@ let session = null
 const keyOf = (name) => String(name || "").replace(/\s+/g, "").toLowerCase()
 
 const api = async (path, body) => {
-  if (!session) return { ok: false, offline: true, error: "Sign on to 98 Messenger to play in tournaments." }
+  if (!session) return { ok: false, offline: true, error: "Pick a player name to play in tournaments." }
   try {
     const response = await fetch(`${SERVER_URL}/api/tourney${path}`, { method: "POST", headers: { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
     return await response.json().catch(() => ({ ok: false, error: `The server had a problem (${response.status}).` }))
   } catch {
-    return { ok: false, offline: true, error: "Couldn't reach the 98ish server." }
+    return { ok: false, offline: true, error: "Couldn't reach the Pickleball 98 server." }
   }
 }
 

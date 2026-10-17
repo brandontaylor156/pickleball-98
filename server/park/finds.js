@@ -1,4 +1,4 @@
-// My Park finds, kept per 98 Messenger account (MongoDB collection "parkfinds" when MONGODB_URI
+// My Park finds, kept per player (MongoDB collection "parkfinds" when MONGODB_URI
 // is set, otherwise memory): the park's easter eggs you've found, so they follow you to every
 // device you sign on to. Today one: "keys", Vince's car keys (give the thirsty regular by a
 // venue's drinks machine a cold drink from it, client park/leisure/parkside.js), which unlock
@@ -63,12 +63,12 @@ const createParkFinds = ({ store = null, now = () => Date.now() } = {}) => {
   return {
     FINDS,
     get: async (key) => {
-      if (!keyOk(key)) return { ok: false, error: "Sign on to 98 Messenger to keep your finds." }
+      if (!keyOk(key)) return { ok: false, error: "Pick a player name to keep your finds." }
       const d = await db.get(key)
       return { ok: true, finds: clean(d?.finds) }
     },
     add: async (key, id, { venue = null } = {}) => {
-      if (!keyOk(key)) return { ok: false, error: "Sign on to 98 Messenger to keep your finds." }
+      if (!keyOk(key)) return { ok: false, error: "Pick a player name to keep your finds." }
       if (!FINDS.includes(id)) return { ok: false, error: "That isn't something to find." }
       const d = await db.get(key)
       const finds = clean(d?.finds)

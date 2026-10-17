@@ -10,7 +10,7 @@
 // you're signed off. Nothing here moves a real person's player: a clone only plays for its
 // absent owner.
 //
-// Every route needs "Authorization: Bearer <token>" from a signed-on 98 Messenger session.
+// Every route needs "Authorization: Bearer <token>" from a player (server/players).
 // All POST, JSON in and out ({ ok, ... }):
 //   /mine    {}                              -> { record|null, away: { games, won, lost, entries, headline } }
 //   /leave   { venue, clone, look, phrases } leave (or update) yours; one venue at a time
@@ -213,10 +213,8 @@ const createLivingPark = ({ aim, store, push = null, now = Date.now, limits = {}
     const ipOf = (request) => String(request.headers["x-forwarded-for"] || request.socket.remoteAddress || "").split(",")[0].trim()
     const accountFor = async (token) => {
       if (!/^[0-9a-f]{48}$/.test(token)) return null
-      for (const session of (await getAim())?.sessions?.values() || []) {
-        if (session.token === token) return { key: session.key, name: session.user?.screenName || session.key, blocked: session.user?.blocked || [] }
-      }
-      return null
+      const session = await (await getAim())?.authenticate?.(token)
+      return session ? { key: session.key, name: session.user?.screenName || session.key, blocked: session.user?.blocked || [] } : null
     }
     r.use(async (request, response, next) => {
       try {
@@ -225,7 +223,7 @@ const createLivingPark = ({ aim, store, push = null, now = Date.now, limits = {}
         const account = await accountFor(String(request.headers.authorization || "").replace(/^Bearer\s+/i, ""))
         if (!account) {
           badTokens(ip)
-          return response.status(401).json({ ok: false, error: "Sign on to 98 Messenger to use Living Park." })
+          return response.status(401).json({ ok: false, error: "Pick a player name to use Living Park." })
         }
         if (writes(account.key)) return response.status(429).json({ ok: false, error: "That's a lot at once. Please wait a few minutes." })
         request.account = account

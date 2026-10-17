@@ -2,7 +2,7 @@
 // My Park, your buddies' clones at a venue, challenge results). The rules (phrasebook, what
 // the regulars remember) are applets/pickleball/park/living.js.
 //
-//   setLivingSession({ token, screenName } | null)   from AimContext (signing on/off)
+//   setLivingSession({ token, screenName } | null)   from App.jsx (the player name, or none)
 //   mine() -> { ok, record, away }, leave({ venue, clone, look, phrases }), recall(), seen(),
 //   atVenue(venue) -> { ok, clones }, sendResult({ owner, cloneWon, score })
 //   signedOn() -> the screen name or null
@@ -17,7 +17,7 @@ export const setLivingSession = (s) => {
 export const signedOn = () => session?.name || null
 
 const api = async (path, body) => {
-  if (!session) return { ok: false, offline: true, error: "Sign on to 98 Messenger to use Living Park." }
+  if (!session) return { ok: false, offline: true, error: "Pick a player name to use Living Park." }
   try {
     const response = await fetch(`${SERVER_URL}/api/livingpark${path}`, {
       method: "POST",
@@ -27,7 +27,7 @@ const api = async (path, body) => {
     const json = await response.json().catch(() => ({ ok: false, error: `The server had a problem (${response.status}).` }))
     return { ...json, status: response.status }
   } catch {
-    return { ok: false, offline: true, error: "Couldn't reach the 98ish server." }
+    return { ok: false, offline: true, error: "Couldn't reach the Pickleball 98 server." }
   }
 }
 

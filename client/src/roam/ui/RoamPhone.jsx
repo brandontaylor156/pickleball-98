@@ -546,8 +546,8 @@ function MessagesApp({ world }) {
   const [to, setTo] = useState(() => buddies.find((b) => b.online)?.name || buddies[0]?.name || "")
   const [text, setText] = useState("")
   const [status, setStatus] = useState("")
-  if (!msgs) return <div className="rphPage">Sign on to 98 Messenger to send messages.</div>
-  if (!buddies.length) return <div className="rphPage">Add a buddy in 98 Messenger first.</div>
+  if (!msgs) return <div className="rphPage">Messages aren't available in Pickleball 98.</div>
+  if (!buddies.length) return <div className="rphPage">Messages aren't available in Pickleball 98.</div>
   const where = () => {
     const i = world.info
     return i?.street ? ` I'm on ${i.street} in ${world.town.name}.` : ` I'm in ${world.town.name}.`

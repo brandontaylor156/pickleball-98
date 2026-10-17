@@ -615,3 +615,20 @@
   margin: 4px 0 0;
   padding-left: 1.3em;
 }
+
+/* "Add a player" by name (Sessions.jsx AddByName) */
+.pbAddName {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.pbAddName input {
+  flex: 1;
+  min-width: 120px;
+}
+.pbAddName .pbError {
+  flex-basis: 100%;
+  margin: 0;
+}

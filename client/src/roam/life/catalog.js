@@ -203,7 +203,7 @@ export const checkoutSplit = (cart, payer) => {
   }
   return { cost: cartTotal(cart), mine, gifts }
 }
-// paying with the chip bank (casino/bank.js shape: { balance, take(n), needsRefill(), refill() })
+// paying with the chip bank (utils/bank.js shape: { balance, take(n), needsRefill(), refill() })
 export const payChips = (bank, cost) => {
   if (!(cost > 0)) return { ok: false, error: "The cart is empty." }
   let refilled = false

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import Combo from "../../../../shared/select/Combo"
-import { detectFormat, checkSize, centersFromSplat, centersFromPly, pointsToSplat, MAX_SYNCED_BYTES } from "./files.js"
+import { detectFormat, checkSize, centersFromSplat, centersFromPly, pointsToSplat } from "./files.js"
 import { similarity, courtCorners, upAxis } from "./align.js"
 import { getBackdrop, saveBackdrop, setPlacement, removeBackdrop, readBytes } from "./store.js"
 
@@ -108,7 +108,7 @@ export default function SplatPanel({ world, venueName, onClose, phone }) {
           <div className="title-bar-text">Photoreal backdrop · {venueName}</div>
         </div>
         <div className="window-body">
-          <p>{b ? <>Showing <b>{b.title || "a backdrop"}</b>{b.splats ? ` (${Math.round(b.splats / 1000)}k splats)` : ""}. {b.file?.textLength > MAX_SYNCED_BYTES * 1.37 ? "Kept on this device only (too big to sync)." : "Synced with your files."}</> : "No backdrop yet. Put a real, photographic 3D copy of the place behind the courts."}</p>
+          <p>{b ? <>Showing <b>{b.title || "a backdrop"}</b>{b.splats ? ` (${Math.round(b.splats / 1000)}k splats)` : ""}. Kept on this device.</> : "No backdrop yet. Put a real, photographic 3D copy of the place behind the courts."}</p>
           {busy && <p className="pkSplatBusy" role="status">{busy}</p>}
           {busy?.startsWith("Recording") && (
             <button type="button" className="pkPrimary" onClick={() => stopRef.current?.()}>

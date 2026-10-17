@@ -63,7 +63,7 @@ test("asking: signed-on people near each other, never blocked, cleaned data", ()
   at("pid4", 2, 0)
   assert.equal(park.tgAsk("pid1", { to: b.you, kind: "dance-off" }).ok, false)
   assert.equal(park.tgAsk("pid1", { to: a.you, kind: "hand" }).ok, false) // yourself
-  assert.match(park.tgAsk("pid1", { to: 4, kind: "hand" }).error, /signed on/) // a guest
+  assert.match(park.tgAsk("pid1", { to: 4, kind: "hand" }).error, /player name/) // a guest
   assert.equal(park.tgAsk("pid1", { to: 3, kind: "hand" }).ok, false) // blocked
   assert.equal(last("pid3", "park:ask"), undefined)
   const r = park.tgAsk("pid1", { to: b.you, kind: "hand" })

@@ -1,16 +1,15 @@
-// Explore's life on the 98ish side (Pickleball 98 > Explore; the open world is client/src/roam/,
+// Explore's life on the game's side (Pickleball 98 > Explore; the open world is client/src/roam/,
 // which reaches this only through roam/host98.js): your private Home/Work places, the Bag, gifts,
-// time worked, and paying with Casino 98's play chips.
+// time worked, and paying with play chips (utils/bank.js).
 //
-// Signed on to 98 Messenger, everything is on your account (server/roam/life.js, so it follows you
-// to the phone and is erased by Delete My Account); signed off, it's kept on this device only
-// (localStorage "98ish.roam.life", per user through the storage seam, utils/userStorage.js).
+// With a player name, everything is on the server under that name (server/roam/life.js); with
+// none, it's kept on this device only (localStorage "98ish.roam.life").
 //
-//   setRoamLifeSession({ token, screenName } | null)   from AimContext (signing on/off)
+//   setRoamLifeSession({ token, screenName } | null)   from App.jsx (the player name, or none)
 //   createLife98({ travel, equip }) -> the host's life API (see below)
 //   getRoamLife() / subscribeRoamLife(fn)               the Bag for the Locker Room
 
-import { createBank } from "../components/applets/casino/bank.js"
+import { createBank } from "./bank.js"
 import { addToBag, addUses, cleanBag, itemOf, takeFromBag } from "../roam/life/catalog.js"
 import { cleanPlace, cleanPlaces } from "../roam/life/places.js"
 
@@ -52,12 +51,12 @@ const writeLocal = (patch) => {
 }
 
 const api = async (path, body) => {
-  if (!session) return { ok: false, error: "Sign on to 98 Messenger first." }
+  if (!session) return { ok: false, error: "Pick a player name first." }
   try {
     const r = await fetch(`${SERVER_URL}/api/roamlife${path}`, { method: "POST", headers: { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
     return await r.json().catch(() => ({ ok: false, error: `The server had a problem (${r.status}).` }))
   } catch {
-    return { ok: false, error: "Couldn't reach the 98ish server. Try again in a minute." }
+    return { ok: false, error: "Couldn't reach the Pickleball 98 server. Try again in a minute." }
   }
 }
 const apply = (r) => {
@@ -111,7 +110,7 @@ export const createLife98 = ({ travel = null, equip = null } = {}) => {
       return { ok: true }
     },
     async sharePlace(id, names) {
-      if (!session) return { ok: false, error: "Sign on to 98 Messenger to share a place with a buddy." }
+      if (!session) return { ok: false, error: "Pick a player name to share a place with a friend." }
       return apply(await api("/places/share", { id, with: names }))
     },
     // ---- the Bag ----
@@ -140,7 +139,7 @@ export const createLife98 = ({ travel = null, equip = null } = {}) => {
       return r
     },
     async gift(to, id, note = "", n = 1) {
-      if (!session) return { ok: false, error: "Sign on to 98 Messenger to give a gift." }
+      if (!session) return { ok: false, error: "Pick a player name to give a gift." }
       return apply(await api("/bag/gift", { to, id, note, n }))
     },
     async accept(giftId) {

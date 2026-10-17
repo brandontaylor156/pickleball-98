@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from "react"
 import { currentCues } from "../pickleball/twin/coach/progress.js"
-import { useLocate } from "../../../utils/locate"
-import { friendsAt } from "../pickleball/park/presence.js"
 import { Select } from "../../shared/select/Combo"
 import Dialog from "../../shared/Dialog"
 import MoreOptions from "../../shared/MoreOptions"
@@ -11,11 +9,38 @@ import { nextRound } from "./rotation"
 import { fromPid } from "./PlayerPicker"
 import * as club from "../../../utils/pbclub"
 import { openMaps } from "../../../utils/maps"
-import { forecastUrl, shapeForecast, conditionOf, temp } from "../weather/weatherCore"
+import { downloadBlob } from "../../../utils/share"
+import { checkName, cleanName, nameKey } from "../../../utils/player"
+import { forecastUrl, shapeForecast, conditionOf, temp } from "../../../utils/weatherCore"
 
 // Play sessions: "Who's in?" for a time at a court. The list, one session (RSVP, running
-// late, who's coming, invite more, add to Calendar, weather, the courts' rotation and a
+// late, who's coming, invite more, a calendar file, weather, the courts' rotation and a
 // little chat), and the editor.
+
+// "Add a player": anyone by their Pickleball 98 player name (the server checks it's real)
+export const AddByName = ({ onAdd, label = "Add a player" }) => {
+  const [name, setName] = useState("")
+  const [error, setError] = useState(null)
+  const add = () => {
+    const problem = checkName(name)
+    if (problem) return setError(problem)
+    onAdd(cleanName(name))
+    setName("")
+    setError(null)
+  }
+  return (
+    <div className="pbAddName">
+      <input type="text" maxLength={16} placeholder="Player name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())} aria-label={label} data-add-name />
+      <button type="button" onClick={add} disabled={!name.trim()}>
+        Add
+      </button>
+      {error && <p className="pbError">{error}</p>}
+    </div>
+  )
+}
+
+// the people to pick from: the ones you know, then names typed in (checked when added)
+const withAdded = (people, names) => [...people, ...names.filter((n) => !people.some((b) => b.k === nameKey(n))).map((n) => ({ k: nameKey(n), name: n }))]
 
 const nameFor = (session, key, names = {}) => session.names?.[key] || names[key] || key
 
@@ -195,21 +220,20 @@ export const SessionEditor = ({ session, buddies, venueId, onClose, onSaved }) =
             </Select>
           </label>
         </div>
-        {buddies.length > 0 && (
-          <fieldset className="pbInvite">
-            <legend>Invite</legend>
-            <div className="pbInviteList">
-              {buddies
-                .filter((b) => !already.has(b.k))
-                .map((b) => (
-                  <label key={b.k} className="pbCheck">
-                    <input type="checkbox" checked={invite.includes(b.name)} onChange={(e) => setInvite(e.target.checked ? [...invite, b.name] : invite.filter((n) => n !== b.name))} data-invite={b.k} />
-                    {b.name}
-                  </label>
-                ))}
-            </div>
-          </fieldset>
-        )}
+        <fieldset className="pbInvite">
+          <legend>Invite</legend>
+          <div className="pbInviteList">
+            {withAdded(buddies, invite)
+              .filter((b) => !already.has(b.k))
+              .map((b) => (
+                <label key={b.k} className="pbCheck">
+                  <input type="checkbox" checked={invite.includes(b.name)} onChange={(e) => setInvite(e.target.checked ? [...invite, b.name] : invite.filter((n) => n !== b.name))} data-invite={b.k} />
+                  {b.name}
+                </label>
+              ))}
+          </div>
+          <AddByName onAdd={(n) => setInvite((v) => (v.some((x) => nameKey(x) === nameKey(n)) ? v : [...v, n]))} />
+        </fieldset>
         <MoreOptions id="pbclub.session" summary={[title || null, `${courts} court${courts > 1 ? "s" : ""}`, skill ? `${skill.min}-${skill.max}` : "any level", open ? "invitees can invite" : "only you invite"].filter(Boolean).join(" · ")}>
           <label>
             Name
@@ -265,25 +289,36 @@ export const SessionEditor = ({ session, buddies, venueId, onClose, onSaved }) =
 
 // ---- one session ----
 
-const addToCalendar = async (session) => {
-  try {
-    const [cal, util] = await Promise.all([import("../calendar/store"), import("../calendar/util")])
-    const id = cal.pickDefault()
-    const venue = core.venueName(session.venue)
-    const event = {
-      ...util.blankEvent({ date: localDate(session.start), zone: cal.zone(), calendarId: id }),
-      allDay: false,
-      title: `🏓 ${session.title}`,
-      start: session.start,
-      end: session.start + session.minutes * 60_000,
-      location: [venue, core.venueAddress(session.venue)].filter(Boolean).join(", "),
-      notes: session.note || "Pickleball 98 · Real Games",
-      reminders: [60],
-    }
-    return await cal.saveEvent(id, event)
-  } catch {
-    return { ok: false, error: "Calendar didn't answer. Try again." }
-  }
+// an .ics file for any calendar app (Apple, Google, Outlook), with a reminder an hour before
+const icsStamp = (t) => new Date(t).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")
+const icsText = (s) => String(s || "").replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\r?\n/g, "\\n")
+export const sessionIcs = (session, now = Date.now()) =>
+  [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Pickleball 98//Real Games//EN",
+    "BEGIN:VEVENT",
+    `UID:${session.id}@pickleball98`,
+    `DTSTAMP:${icsStamp(now)}`,
+    `DTSTART:${icsStamp(session.start)}`,
+    `DTEND:${icsStamp(session.start + (session.minutes || 120) * 60_000)}`,
+    `SUMMARY:${icsText(`🏓 ${session.title}`)}`,
+    `LOCATION:${icsText([core.venueName(session.venue), core.venueAddress(session.venue)].filter(Boolean).join(", "))}`,
+    `DESCRIPTION:${icsText(session.note || "Pickleball 98 · Real Games")}`,
+    "BEGIN:VALARM",
+    "TRIGGER:-PT60M",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${icsText(session.title)}`,
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+  ].join("\r\n")
+
+const addToCalendar = (session) => {
+  const name = `${session.title || "Pickleball"}.ics`.replace(/[\\/:*?"<>|]/g, "")
+  downloadBlob(sessionIcs(session), name, "text/calendar")
+  return { ok: true }
 }
 
 const Courts = ({ session, me, names, onScore }) => {
@@ -384,26 +419,11 @@ export const SessionView = ({ session, state, buddies, onBack, onScore, onEdit }
   const canInvite = host || session.open
   const started = Date.now() >= session.start - 30 * 60_000
   const name = (k) => nameFor(session, k, state.names)
-  // Live Venue Presence: who's physically at this session's court right now: friends who share
-  // their location with you (Buddy Locator), and you. Nothing new is shared: it's what your
-  // Buddy Locator already shows you, matched to this venue.
-  const loc = useLocate()
-  const venueId = session.venue?.id || null
-  const meHere = !!venueId && loc.me?.venue?.id === venueId && !loc.me.venue.nearby
-  const liveHere = new Set(venueId ? friendsAt(loc.friends, venueId).here.map((f) => f.key) : [])
-  if (meHere && me) liveHere.add(me)
-  const sessionNow = Date.now() > session.start - 2 * 3_600_000 && Date.now() < session.start + (session.minutes || 120) * 60_000
   const person = (k) => (
     <li key={k}>
       {name(k)}
       {k === session.host ? " (host)" : ""}
       {session.rsvps?.[k]?.late ? <span className="pbLate"> · {core.lateText(session.rsvps[k].late)}</span> : null}
-      {liveHere.has(k) && session.rsvps?.[k]?.late !== "here" ? (
-        <span className="pbHereLive" data-here-live={k}>
-          {" "}
-          · here now
-        </span>
-      ) : null}
     </li>
   )
   const answer = async (s) => {
@@ -488,14 +508,6 @@ export const SessionView = ({ session, state, buddies, onBack, onScore, onEdit }
           </button>
         </div>
       )}
-      {meHere && sessionNow && (mine === "in" || mine === "waitlist") && session.rsvps?.[me]?.late !== "here" && !session.cancelled && (
-        <p className="pbCheckIn" data-check-in>
-          You're at {core.venueName(session.venue, { short: true })}.{" "}
-          <button type="button" onClick={() => late("here")} data-check-in-btn>
-            Check in
-          </button>
-        </p>
-      )}
       {msg && <p className="pbError">{msg}</p>}
       <div className="pbWho">
         <div>
@@ -553,9 +565,9 @@ export const SessionView = ({ session, state, buddies, onBack, onScore, onEdit }
           )}
           <button
             type="button"
-            onClick={async () => {
-              const r = await addToCalendar(session)
-              setMsg(r.ok ? "Added to your calendar (reminder an hour before)." : r.error)
+            onClick={() => {
+              const r = addToCalendar(session)
+              setMsg(r.ok ? "Downloaded a calendar file: open it to add the session (with a reminder an hour before)." : r.error)
             }}
           >
             Add to Calendar
@@ -587,7 +599,7 @@ export const SessionView = ({ session, state, buddies, onBack, onScore, onEdit }
           }}
         >
           <div className="pbInviteList">
-            {buddies
+            {withAdded(buddies, pick)
               .filter((b) => b.k !== session.host && !(session.invited || []).includes(b.k))
               .map((b) => (
                 <label key={b.k} className="pbCheck">
@@ -595,8 +607,9 @@ export const SessionView = ({ session, state, buddies, onBack, onScore, onEdit }
                   {b.name}
                 </label>
               ))}
-            {!buddies.length && <p className="pbMuted">Add people to your Buddy List first.</p>}
+            {!buddies.length && !pick.length && <p className="pbMuted">Nobody yet: add a player by name below.</p>}
           </div>
+          <AddByName onAdd={(n) => setPick((v) => (v.some((x) => nameKey(x) === nameKey(n)) ? v : [...v, n]))} />
         </Dialog>
       )}
     </div>

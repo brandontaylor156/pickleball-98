@@ -393,12 +393,10 @@ test("stats: what each activity adds, fitness levels, your player's gains", asyn
   assert.equal(S.gainsLook({ build: "slim" }, st, { now: now + 9 * 3600_000 }).build, "regular", "fit: for good")
 })
 
-test("TV: what's on (friends' live games, your videos, YouTube together), where you sit", async () => {
+test("TV: what's on (friends' live games, your videos), where you sit", async () => {
   const T = await import("./tv.js")
-  // the channels: never a broadcast; YouTube together needs 98 Messenger
-  assert.deepEqual(T.channelsFor({}).map((c) => c.id), ["live", "videos", "together"])
-  assert.ok(T.channelsFor({ signedOn: false }).find((c) => c.id === "together").disabled)
-  assert.equal(T.channelsFor({ signedOn: true, pal: { name: "Ava" } }).find((c) => c.id === "together").label, "💞 With Ava")
+  // the channels: never a broadcast
+  assert.deepEqual(T.channelsFor().map((c) => c.id), ["live", "videos"])
   // live: this venue's game first; nobody live: says so
   const live = T.listFor("live", { venue: "loscab", venueName: () => "SMASH", live: [{ id: "a1", host: "Ben", venue: "smash", courtName: "Court 2" }, { id: "b2", host: "Ava", venue: "loscab" }] })
   assert.deepEqual(live.list.map((x) => x.id), ["b2", "a1"])
@@ -406,12 +404,10 @@ test("TV: what's on (friends' live games, your videos, YouTube together), where 
   assert.equal(live.list[1].sub, "SMASH · Court 2")
   assert.ok(live.list.every((x) => x.live))
   assert.match(T.listFor("live", { live: [] }).msg, /Nobody's live/)
-  // your videos: what's on drive C: (no file, no item)
+  // your videos: the ones opened (no file, no item), then "Open a video..."
   const vids = T.listFor("videos", { videos: [{ key: "k1", title: "Highlights", duration: 75, file: {} }, { key: "k2", title: "Gone" }] })
-  assert.deepEqual(vids.list.map((x) => [x.id, x.sub]), [["k1", "1:15"]])
-  assert.match(T.listFor("videos", { videos: [] }).msg, /My Videos/)
-  assert.match(T.listFor("together", { signedOn: false }).msg, /sign on/)
-  assert.match(T.listFor("together", { signedOn: true, pal: { name: "Ava" } }).msg, /Ava gets a Join button/)
+  assert.deepEqual(vids.list.map((x) => [x.id, x.sub]), [["k1", "1:15"], [T.OPEN_VIDEO, "From this device"]])
+  assert.match(T.listFor("videos", { videos: [] }).msg, /Open a video/)
   // the seat: in front of the set, turned toward it, free, within reach
   const tv = { x: 0, y: 2, z: 0, a: 0 } // facing +z
   const spot = { x: 0, z: 2.6, y: 0 }

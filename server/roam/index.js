@@ -384,7 +384,7 @@ const createRoam = ({ emit = () => {}, emitVolatile = null, clock = realClock, m
   let iceSource = ice
   const iceConfig = async () => {
     try {
-      iceSource ??= require("../aim/ice").createIce()
+      iceSource ??= require("../voice/ice").createIce()
       return await iceSource.config()
     } catch {
       return { iceServers: [{ urls: "stun:stun.l.google.com:19302" }], turn: false }

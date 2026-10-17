@@ -331,8 +331,8 @@ export const createInterior = ({ town, host = {}, room, layout: L, phone = false
     if (s.kind === "tv") {
       const on = !tv?.on
       if (L.kind === "home") {
-        setTv(on, { title: "Watch Together", sub: "Pick a video in 98 Messenger" })
-        world.net?.request?.("roam:say", { kind: "tv", data: { on, title: "Watch Together", sub: "Pick a video in 98 Messenger" } }).catch?.(() => {})
+        setTv(on, { title: "TV", sub: "Nothing on right now" })
+        world.net?.request?.("roam:say", { kind: "tv", data: { on, title: "TV", sub: "Nothing on right now" } }).catch?.(() => {})
       } else {
         setTv(on)
         world.net?.request?.("roam:say", { kind: "tv", data: { on } }).catch?.(() => {})
