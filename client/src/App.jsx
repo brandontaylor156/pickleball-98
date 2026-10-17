@@ -17,9 +17,10 @@ import { setRoamLifeSession } from "./utils/roamLife"
 import { takeLinkHandoff } from "./utils/deepLink"
 import "./app.css"
 
-// Pickleball 98, standalone: the game full screen in a 98 window, the server connection
-// (NetProvider), Help, notices, and the player name (utils/player.js) that the online parts
-// (Real Games, tournaments, Living Park, Explore's places) sign their requests with.
+// Pickleball 98, standalone: the game full screen (no 98 window round it: 98ish draws
+// that), the server connection (NetProvider), Help, notices, and the player name
+// (utils/player.js) that the online parts (Real Games, tournaments, Living Park, Explore's
+// places) sign their requests with.
 
 const Pickleball = lazy(() => import("./components/applets/pickleball/Pickleball"))
 
@@ -77,12 +78,13 @@ export default function App() {
     <div className={`os-root pkApp${mobile ? " os-mobile" : ""}`}>
       <NetProvider socket={socket} mobile={mobile}>
         <div className="mobileWindow pkAppFrame">
+          {/* no 98 window round the game: that frame belongs to 98ish's desktop. (.window and
+              .title-bar-controls stay as hooks: GameChat docks into them; app.css draws neither) */}
           <div className="window pkAppWin">
-            <div className="title-bar">
-              <div className="title-bar-text">
-                <img src="/assets/program_icons/pickleball.svg" alt="" width="16" height="16" />
-                <span>Pickleball 98</span>
-              </div>
+            <Suspense fallback={<div className="pkAppLoading">Loading Pickleball 98...</div>}>
+              <Pickleball mobile={mobile} handoff={handoff} />
+            </Suspense>
+            <div className="title-bar pkAppTop">
               <div className="title-bar-controls pkAppControls">
                 <button type="button" className="pkPlayerBtn" onClick={() => setGate(true)} title={player ? "Your player name" : "Pick a player name"} data-player-btn>
                   {player ? player.name : "Pick a name"}
@@ -90,9 +92,6 @@ export default function App() {
                 <button type="button" aria-label="Help" onClick={() => openHelp("pickleball")} />
               </div>
             </div>
-            <Suspense fallback={<div className="pkAppLoading">Loading Pickleball 98...</div>}>
-              <Pickleball mobile={mobile} handoff={handoff} onClose={() => {}} />
-            </Suspense>
           </div>
         </div>
         <PbClubBridge socket={socket} onOpen={onOpen} />

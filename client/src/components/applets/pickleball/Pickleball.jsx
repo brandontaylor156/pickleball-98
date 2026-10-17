@@ -1758,8 +1758,8 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
         "-",
         { label: phase === "paused" ? "Resume (P)" : "Pause (P)", disabled: (phase !== "playing" && phase !== "paused") || isOnline, onClick: togglePause },
         { label: "Quit to Main Menu", disabled: !session, onClick: quitToMenu },
-        "-",
-        { label: "Exit", onClick: onClose },
+        // (on its own site there's nothing to exit to)
+        ...(onClose ? ["-", { label: "Exit", onClick: onClose }] : []),
       ],
     },
     {

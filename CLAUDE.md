@@ -10,7 +10,7 @@ links here as `?mode=&venue=&place=`, read by `client/src/utils/deepLink.js`).
 - Never print the MongoDB connection string, tokens or any `.env` value.
 - Free services only unless the owner says otherwise. Commit and push only when asked.
 - Commit messages end with the Co-Authored-By / Claude-Session lines given in the session.
-- Keep the Windows 98 look (98.css). Baseline view first; the rest under **More options »** (`shared/MoreOptions.jsx`); the primary action stays on screen at 390x844.
+- Keep the Windows 98 look (98.css) inside the game, but no 98 window round it (no teal desktop, frame or blue title bar: that chrome is 98ish's, the launcher's; owner, Oct 2026). Baseline view first; the rest under **More options »** (`shared/MoreOptions.jsx`); the primary action stays on screen at 390x844.
 - **Nothing moves your player for you** (owner's rule; never add auto-movement or offer it as a setting).
 - Real venues: **nothing invented** (owner's rule): only what OSM, the aerial, photos or terrain data show, each with its source (`docs/venue-provenance.md`).
 - Game loops measure time with `utils/frameClock.js` (keep `last` across frames, `reset()` only on restart).

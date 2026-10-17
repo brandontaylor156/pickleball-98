@@ -1,44 +1,63 @@
-/* Pickleball 98, standalone: the game in one full-screen 98 window (App.jsx) */
+/* Pickleball 98, standalone (App.jsx): the game fills the page with no 98 window round it
+   (no teal desktop, bevelled frame or blue title bar: those are 98ish's, the launcher's).
+   The game itself (menus, screens, dialogs) keeps its 98 look. */
 
 .pkApp {
-  background: #008080;
+  background: #000;
 }
 
-/* on a computer: the window fills the page, a little teal round it on big screens */
 .pkAppFrame {
   position: absolute;
   inset: 0;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
-@media (min-width: 1100px) and (min-height: 760px) {
-  .pkApp:not(.os-mobile) .pkAppFrame {
-    padding: 12px;
-  }
+/* (beats main.css's .os-mobile .mobileWindow, which leaves the bottom inset to the window) */
+.os-mobile .pkAppFrame {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-.pkAppWin {
+/* .window only as the box GameChat docks into: none of 98.css's frame */
+.pkAppWin.window {
+  position: relative;
   height: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: #c0c0c0;
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
-/* (Pickleball.css sizes the game for a 98ish window body: here it takes what's left under
-   the title bar) */
+/* (Pickleball.css sizes the game for a 98ish window body, under a title bar: here it takes
+   the whole box) */
 .pkAppWin > .pkRoot {
   flex: 1;
   min-height: 0;
   height: auto;
 }
 
-.pkAppWin > .title-bar .title-bar-text {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
+/* the player's name, the chat bubble and Help: at the right end of the game's menu row */
+.pkAppWin > .title-bar.pkAppTop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+  padding: 2px 3px;
+  background: none;
 }
 .pkAppControls {
   align-items: center;
   gap: 2px;
+}
+/* the court edge to edge: no sunken 98 border round it */
+.pkAppWin .pkStage {
+  margin: 0;
+  border: 0;
+}
+/* on a phone the buttons are fingertip-sized (main.css): the menu row grows to hold them */
+.os-mobile .pkAppWin > .pkRoot > .menuBar {
+  min-height: 30px;
+  align-items: center;
 }
 .pkAppControls .pkPlayerBtn {
   min-width: 0;
