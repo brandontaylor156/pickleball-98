@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { checkName, createPlayer, forgetPlayer } from "../utils/player"
+import { SUGGESTED_NAME } from "../utils/embed"
 
 // "Pick a player name": the first time the game opens (and from the title bar's name button).
 // No password: the name is yours on this device. "Play offline" skips it for this visit:
@@ -7,7 +8,8 @@ import { checkName, createPlayer, forgetPlayer } from "../utils/player"
 //   <PlayerGate player={player} onDone={() => ...} onOffline={() => ...} />
 
 export default function PlayerGate({ player = null, onDone, onOffline = null }) {
-  const [name, setName] = useState("")
+  // (in 98ish's window: its screen name to start from, utils/embed.js)
+  const [name, setName] = useState(player ? "" : SUGGESTED_NAME)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const input = useRef(null)

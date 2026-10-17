@@ -14,7 +14,8 @@ import { setClubSession } from "./utils/pbclub"
 import { setTourneySession } from "./utils/tourney"
 import { setLivingSession } from "./utils/livingpark"
 import { setRoamLifeSession } from "./utils/roamLife"
-import { takeLinkHandoff } from "./utils/deepLink"
+import { handoffFromSearch, takeLinkHandoff } from "./utils/deepLink"
+import { EMBEDDED, exitToHost, onHostOpen } from "./utils/embed"
 import "./app.css"
 
 // Pickleball 98, standalone: the game full screen (no 98 window round it: 98ish draws
@@ -73,16 +74,18 @@ export default function App() {
     setGate(false)
   }
   const onOpen = useCallback((h) => setHandoff(h), [])
+  // in 98ish's window (utils/embed.js): a new start from 98ish while the game is open
+  useEffect(() => onHostOpen((search) => setHandoff(handoffFromSearch(search))), [])
 
   return (
-    <div className={`os-root pkApp${mobile ? " os-mobile" : ""}`}>
+    <div className={`os-root pkApp${mobile ? " os-mobile" : ""}${EMBEDDED ? " is-embedded" : ""}`}>
       <NetProvider socket={socket} mobile={mobile}>
         <div className="mobileWindow pkAppFrame">
           {/* no 98 window round the game: that frame belongs to 98ish's desktop. (.window and
               .title-bar-controls stay as hooks: GameChat docks into them; app.css draws neither) */}
           <div className="window pkAppWin">
             <Suspense fallback={<div className="pkAppLoading">Loading Pickleball 98...</div>}>
-              <Pickleball mobile={mobile} handoff={handoff} />
+              <Pickleball mobile={mobile} handoff={handoff} onClose={EMBEDDED ? exitToHost : undefined} />
             </Suspense>
             <div className="title-bar pkAppTop">
               <div className="title-bar-controls pkAppControls">
