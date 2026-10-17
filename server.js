@@ -8,6 +8,7 @@
 
 const express = require("express")
 const cors = require("cors")
+const mongoose = require("mongoose")
 const { createPlayers } = require("./server/players")
 const { attachNet } = require("./server/net")
 const { venuesService } = require("./server/venues")
@@ -17,6 +18,15 @@ const { livingParkService } = require("./server/livingpark")
 const { createParkFinds } = require("./server/park/finds")
 const { createRoamLife } = require("./server/roam/life")
 const { createMeter } = require("./server/meter")
+
+// Living Park, My Park finds and Explore's life use mongoose's default connection (the other
+// stores open their own); in 98ish another module opened it, so it's opened here
+if (process.env.MONGODB_URI) {
+  mongoose
+    .connect(process.env.MONGODB_URI, { maxPoolSize: 3 })
+    .then(() => console.log("[mongoose] default connection open"))
+    .catch((error) => console.error("[mongoose] default connection failed", error?.message))
+}
 
 const app = express()
 app.use(cors())
