@@ -481,7 +481,8 @@ const createPark = ({ emit = () => {}, emitVolatile = null, rooms = null, clock 
     rooms.ready(other.pid, made.roomId, true)
     const started = rooms.start(host.pid, made.roomId)
     if (!started?.ok) {
-      rooms.leave?.(host.pid, made.roomId)
+      // (both out: the room closes, nobody's left alone in a parkact lobby)
+      for (const q of [other, host]) rooms.leave?.(q.pid, made.roomId)
       return { ok: false, error: started?.error || "That couldn't start. Please try again." }
     }
     for (const [p, q] of [

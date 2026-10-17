@@ -3,6 +3,7 @@ import { Select } from "../../shared/select/Combo"
 import MoreOptions from "../../shared/MoreOptions"
 import * as T from "./tourneyCore"
 import * as net from "../../../utils/tourney"
+import { askForName } from "../../../utils/player"
 import "./Tournaments.css"
 import { ScoreBug } from "./ScoreBug"
 import { AddByName } from "./Sessions"
@@ -199,10 +200,24 @@ const Detail = ({ id, state, buddies, onBack, onPlay }) => {
   const ev = state.events.find((e) => e.id === id)
   const [tab, setTab] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [loadError, setLoadError] = useState(null)
   useEffect(() => {
-    net.open(id)
+    let live = true
+    setLoadError(null)
+    net.open(id).then((r) => live && !r?.ok && setLoadError(r?.error || "Couldn't load this tournament."))
+    return () => {
+      live = false
+    }
   }, [id])
-  if (!doc) return <p className="pbMuted">Loading...</p>
+  if (!doc)
+    return (
+      <div className="tnDetail">
+        <button type="button" className="tnBack" onClick={onBack} data-action="tourney-back">
+          « All tournaments
+        </button>
+        {loadError ? <p className="pbError">{loadError}</p> : <p className="pbMuted">Loading...</p>}
+      </div>
+    )
   const me = state.me
   const entry = T.entryOf(doc, me)
   const invited = entry && entry.partner?.k === me && !entry.partner.ok
@@ -295,7 +310,15 @@ const Tournaments = ({ buddies = [], onPlay = null, focus = null, venue = null }
   }, [])
   const now = state.now || Date.now()
   const events = useMemo(() => state.events.filter((e) => !venue || e.venue === venue), [state.events, venue])
-  if (state.status === "off") return <p className="pbBannerInfo">Pick a player name to sign up for tournaments. Your trophies stay on this device.</p>
+  if (state.status === "off")
+    return (
+      <p className="pbBannerInfo">
+        Pick a player name to sign up for tournaments. Your trophies stay on this device.{" "}
+        <button type="button" onClick={askForName} data-action="pick-name">
+          Pick a name...
+        </button>
+      </p>
+    )
   if (open) return <Detail id={open} state={state} buddies={buddies} onBack={() => setOpen(null)} onPlay={onPlay} />
   const mine = events.filter((e) => e.entry || e.next)
   return (

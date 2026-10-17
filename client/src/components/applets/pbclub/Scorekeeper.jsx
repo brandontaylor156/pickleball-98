@@ -74,6 +74,7 @@ const useWakeLock = (on) => {
 
 const teamName = (players) => players.map(nameOf).join(" & ")
 
+let appliedPrefill = null // the session game last put on the scorekeeper (prefill.id)
 const Scorekeeper = ({ me, people, prefill, onSaved }) => {
   const prefs = getPrefs()
   const [cfg, setCfg] = useState({ format: prefs.format, scoring: prefs.scoring, to: prefs.to, bestOf: prefs.bestOf, winBy: prefs.winBy, freeze: prefs.freeze, first: 0, venue: prefs.venue || "" })
@@ -86,9 +87,11 @@ const Scorekeeper = ({ me, people, prefill, onSaved }) => {
   const [busy, setBusy] = useState(false)
   const bannerTimer = useRef(null)
 
-  // a game handed over from a session's courts
+  // a game handed over from a session's courts (once: reopening the tab mustn't put it back
+  // over what was changed or scored since)
   useEffect(() => {
-    if (!prefill?.id) return
+    if (!prefill?.id || prefill.id === appliedPrefill) return
+    appliedPrefill = prefill.id
     setPlayers(prefill.teams)
     setCfg((c) => ({ ...c, format: prefill.teams[0].length === 1 ? "singles" : "doubles", venue: prefill.venue?.id || c.venue }))
     setSession(prefill.session || null)

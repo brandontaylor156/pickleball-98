@@ -4,9 +4,17 @@
 
 const MODES = new Set(["quick", "practice", "park", "real", "online", "tour"])
 
-// search: a location.search string -> a handoff ({ id, floppy }) or null
+// Go Live's "Share the link" (twin/live/GoLive.jsx) is ?live=<broadcast>&code=<code>: watch it.
+const LIVE_ID = /^[\w-]{1,64}$/
+
+// search: a location.search string -> a handoff ({ id, floppy } | { id, live, code }) or null
 export const handoffFromSearch = (search, id = Date.now()) => {
   const q = new URLSearchParams(search || "")
+  const live = q.get("live")
+  if (live && LIVE_ID.test(live)) {
+    const code = q.get("code")
+    return { id, live, code: code && LIVE_ID.test(code) ? code : null }
+  }
   const mode = q.get("mode")
   const venue = (q.get("venue") || "").slice(0, 80) || null
   let place = null
@@ -28,7 +36,12 @@ export const takeLinkHandoff = () => {
   const handoff = handoffFromSearch(window.location.search)
   if (handoff) {
     try {
-      window.history.replaceState(null, "", window.location.pathname + window.location.hash)
+      // (98ish's frame keeps ?embed= and ?name=: a reload there is still inside 98ish: utils/embed.js)
+      const q = new URLSearchParams(window.location.search)
+      const keep = new URLSearchParams()
+      for (const k of ["embed", "name"]) if (q.has(k)) keep.set(k, q.get(k))
+      const rest = keep.toString()
+      window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash)
     } catch {}
   }
   return handoff

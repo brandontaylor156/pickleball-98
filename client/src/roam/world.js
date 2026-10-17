@@ -94,7 +94,7 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
       shadowAt.dirty = false
       return
     }
-    const c = center()
+    const c = centerNow()
     // (a fresh map is drawn on a few frames in a row after a change, and again every couple of
     // seconds: a single redraw was sometimes lost in the browsers tested)
     if (shadowAt.frames > 0) {
@@ -203,8 +203,15 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
   const TREE_NEAR = phone ? 120 : 240
   let treesAt = null
   const moved = new Map() // parked car id -> { x, z, yaw } (left somewhere else this session) | "gone"
-  let tilesDirty = true
+  let tilesDirty = true // (the parked cars and bikes: someone took one, a tile came or went)
   let tilesDirtyForShadow = true
+  // (the built tiles changed: their walks, street furniture and trees are gathered again, once the
+  // tiles stop coming for a moment or every 0.4 s while they keep coming, not after every tile:
+  // a hitch per tile on a phone)
+  let tilesChanged = true
+  let tilesQuiet = 0
+  let tilesWaited = 0
+  let treeAll = []
   let wantT = 0
   let lastCenter = null
   let wanted = { near: new Set(), far: new Set(), list: [] }
@@ -321,7 +328,8 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
     if (near) colliders.addTile(t.key, wallRings(t.buildings, g))
     if (near && t.shore?.length) shoreCol.addEdges(t.key, t.shore)
     tiles.set(t.key, e)
-    tilesDirty = true
+    tilesChanged = true
+    tilesQuiet = 0
     tilesDirtyForShadow = true
     return e
   }
@@ -334,19 +342,45 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
       shoreCol.removeTile(key)
     }
     tiles.delete(key)
-    tilesDirty = true
+    buildQueue.delete(key)
+    tilesChanged = true
+    tilesQuiet = 0
   }
   const center = () => {
     if (driving && car) return { x: car.x, z: car.z }
     const tp = onTransit && transitPose()
     return tp ? { x: tp.x, z: tp.z } : { x: me.walker.x, z: me.walker.z }
   }
-  const stepTiles = (dt) => {
+  // (the same, written into one shared object: for the per-frame steps that read it at once and
+  // don't keep it)
+  const centerBuf = { x: 0, z: 0 }
+  const centerNow = () => {
+    let x = me.walker.x
+    let z = me.walker.z
+    if (driving && car) {
+      x = car.x
+      z = car.z
+    } else {
+      const tp = onTransit && transitPose()
+      if (tp) {
+        x = tp.x
+        z = tp.z
+      }
+    }
+    centerBuf.x = x
+    centerBuf.z = z
+    return centerBuf
+  }
+  const stepTiles = (dt, flush = false) => {
     wantT -= dt
-    const c = center()
+    if (tilesChanged) {
+      tilesQuiet += dt
+      tilesWaited += dt
+    }
+    const c = centerNow()
     if (wantT <= 0 || !lastCenter || Math.hypot(c.x - lastCenter.x, c.z - lastCenter.z) > 40) {
       wantT = 0.5
-      lastCenter = c
+      lastCenter = { x: c.x, z: c.z }
       // (looking ahead when driving: the tiles in front come first)
       const ahead = driving && car ? { x: c.x + Math.sin(car.yaw) * Math.min(250, Math.abs(car.speed) * 6), z: c.z + Math.cos(car.yaw) * Math.min(250, Math.abs(car.speed) * 6) } : c
       const near = tilesAround(frame, c.x, c.z, NEAR_R)
@@ -377,18 +411,26 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
       buildQueue.delete(k)
       budget--
     }
-    const cc = center()
-    if (tilesDirty || !treesAt || Math.hypot(cc.x - treesAt.x, cc.z - treesAt.z) > 50) {
-      if (tilesDirty) {
-        refreshLife()
-        streetLayer.set([...tiles.values()].flatMap((e) => e.street || []))
-      }
+    const cc = centerNow()
+    const apply = tilesChanged && (flush || !treesAt || tilesQuiet >= 0.12 || tilesWaited >= 0.4)
+    if (apply) {
+      refreshLife()
+      streetLayer.set([...tiles.values()].flatMap((e) => e.street || []))
+      treeAll = [...tiles.values()].flatMap((e) => e.trees)
+      tilesChanged = false
+      tilesWaited = 0
+    }
+    const far = !treesAt || Math.hypot(cc.x - treesAt.x, cc.z - treesAt.z) > 50
+    if (apply || tilesDirty || far) {
       tilesDirty = false
       refreshParked()
+    }
+    if (apply || far) {
       treesAt = { x: cc.x, z: cc.z }
-      // (the venues' trees near you, plain ones farther off)
+      // (the venues' trees near you, plain ones farther off; sorted in place, so a list that was
+      // nearest-first 50 m ago sorts quickly)
       const r2 = TREE_NEAR * TREE_NEAR
-      const tl = [...tiles.values()].flatMap((e) => e.trees)
+      const tl = treeAll
       for (const t of tl) t.d2 = (t.x - cc.x) ** 2 + (t.z - cc.z) ** 2
       tl.sort((a, b) => a.d2 - b.d2)
       trees.set(tl, (t) => t.d2 < r2)
@@ -442,24 +484,43 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
         if (!r._street) r._street = e.t.street || []
         if (trafficRoad(r)) roads.push(r)
       }
-      const shops = shopSpots(e.t)
-      for (const l of walkLines(e.t.roads)) {
+      const shops = (e.shops ||= shopSpots(e.t))
+      // (a tile's walks are worked out once, when it's first near: the same lines after that)
+      e.walks ||= walkLines(e.t.roads).map((l) => {
         // (near a shop: any point of the walk within 60 m of one)
         l.shop = shops.some((sh) => l.road.pts.some((q) => Math.hypot(q.x - sh.x, q.z - sh.z) < 60 + sh.r))
-        lines.push(l)
-      }
+        return l
+      })
+      for (const l of e.walks) lines.push(l)
     }
     life.roads = roads
     life.lines = lines
   }
   // where people are, for the traffic to stop for and the walkers to wait for
-  const peopleNow = () => {
-    const out = []
-    if (driving && car) out.push({ x: car.x, z: car.z, car: true }, { x: car.x + Math.sin(car.yaw) * 1.6, z: car.z + Math.cos(car.yaw) * 1.6, car: true }, { x: car.x - Math.sin(car.yaw) * 1.6, z: car.z - Math.cos(car.yaw) * 1.6, car: true })
-    else if (!riding) out.push({ x: me.walker.x, z: me.walker.z })
-    for (const r of remotes.values()) out.push({ x: r.x, z: r.z, car: !!(r.act & ACT.drive) })
-    return out
+  // (one array and pool of points, refilled each frame: read at once, never kept)
+  const peopleOut = []
+  const peoplePool = []
+  const personAt = (x, z, isCar) => {
+    const o = peoplePool[peopleOut.length] || (peoplePool[peopleOut.length] = { x: 0, z: 0, car: false })
+    o.x = x
+    o.z = z
+    o.car = isCar
+    peopleOut.push(o)
   }
+  const peopleNow = () => {
+    peopleOut.length = 0
+    if (driving && car) {
+      const sx = Math.sin(car.yaw) * 1.6
+      const sz = Math.cos(car.yaw) * 1.6
+      personAt(car.x, car.z, true)
+      personAt(car.x + sx, car.z + sz, true)
+      personAt(car.x - sx, car.z - sz, true)
+    } else if (!riding) personAt(me.walker.x, me.walker.z, false)
+    for (const r of remotes.values()) personAt(r.x, r.z, !!(r.act & ACT.drive))
+    return peopleOut
+  }
+  // (what the walkers wait for: the people and the traffic, the same array every frame)
+  const pedPeople = []
   // the sea under a point (a coast town)?
   const seaAt = (x, z) => {
     const t = tileAt(x, z)
@@ -527,26 +588,49 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
   }
   const stepLife = (dt) => {
     life.time = clock
-    const c = center()
+    const c = centerNow()
     const people = peopleNow()
     life.people = people
     traffic.step(life, c, dt)
-    const view = { x: camera.position.x, z: camera.position.z, fx: Math.sin(cam.yaw), fz: Math.cos(cam.yaw), fresh: clock < freshUntil }
-    peds.step({ lines: life.lines, people: [...people, ...traffic.cars.map((t) => ({ x: t.x, z: t.z }))], view }, c, dt)
+    pedPeople.length = 0
+    for (const p of people) pedPeople.push(p)
+    for (const t of traffic.cars) pedPeople.push(t)
+    pedWorld.lines = life.lines
+    pedView.x = camera.position.x
+    pedView.z = camera.position.z
+    pedView.fx = Math.sin(cam.yaw)
+    pedView.fz = Math.cos(cam.yaw)
+    pedView.fresh = clock < freshUntil
+    peds.step(pedWorld, c, dt)
   }
+  const pedView = { x: 0, z: 0, fx: 0, fz: 1, fresh: false }
+  const pedWorld = { lines: [], people: pedPeople, view: pedView }
+  // (the passing cars' poses: one array and pool, refilled each frame)
+  const trafficOut = []
+  const trafficPool = []
+  const pedSeen = new Set()
   const drawLife = (dt) => {
-    trafficLayer.set(
-      traffic.cars.map((t) => {
-        const y = heightAt(t.x, t.z, 0, true) ?? 0
-        const m = MODELS[t.model] || MODELS.sedan
-        const fx = Math.sin(t.yaw) * (m.wheelbase / 2)
-        const fz = Math.cos(t.yaw) * (m.wheelbase / 2)
-        const hf = groundAt(t.x + fx, t.z + fz) ?? y
-        const hb = groundAt(t.x - fx, t.z - fz) ?? y
-        return { model: t.model, color: t.color, x: t.x, y, z: t.z, yaw: t.yaw, pitch: Math.atan2(hf - hb, m.wheelbase) }
-      })
-    )
-    const seen = new Set()
+    trafficOut.length = 0
+    for (const t of traffic.cars) {
+      const y = heightAt(t.x, t.z, 0, true) ?? 0
+      const m = MODELS[t.model] || MODELS.sedan
+      const fx = Math.sin(t.yaw) * (m.wheelbase / 2)
+      const fz = Math.cos(t.yaw) * (m.wheelbase / 2)
+      const hf = groundAt(t.x + fx, t.z + fz) ?? y
+      const hb = groundAt(t.x - fx, t.z - fz) ?? y
+      const o = trafficPool[trafficOut.length] || (trafficPool[trafficOut.length] = {})
+      o.model = t.model
+      o.color = t.color
+      o.x = t.x
+      o.y = y
+      o.z = t.z
+      o.yaw = t.yaw
+      o.pitch = Math.atan2(hf - hb, m.wheelbase)
+      trafficOut.push(o)
+    }
+    trafficLayer.set(trafficOut)
+    const seen = pedSeen
+    seen.clear()
     // (people walking by: a figure only within sight, animated every other frame on a phone)
     lifeTick++
     const animNow = !phone || lifeTick % 2 === 0
@@ -898,6 +982,8 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
     const r = remotes.get(num)
     if (!r?.car || driving) return
     net?.request?.("roam:ride", { num }).then((res) => {
+      // (the answer came after you left, got into a car of your own, or your friend drove off)
+      if (disposed || driving || riding || onTransit) return
       if (!res?.ok) return onEvent({ type: "toast", text: res?.error || "Couldn't get in." })
       riding = { num }
       dropFig("me")
@@ -1074,6 +1160,9 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
   const callRide = async (kind, dest) => {
     if (driving || riding || onTransit) return { ok: false, error: "Get out first." }
     await loadNav()
+    // (the map may have taken a moment: you could have got into a car, or left, meanwhile)
+    if (disposed) return { ok: false, error: "" }
+    if (driving || riding || onTransit) return { ok: false, error: "Get out first." }
     if (!nav.graph) return { ok: false, error: "The map didn't load. Try again?" }
     cancelRide(true)
     const w = me.walker
@@ -1580,6 +1669,17 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
   }
 
   // ---------- the frame ----------
+  // (every bus stop in town, gathered once per timetable: the map is drawn often)
+  let stopsOf = null
+  let stopsAll = []
+  const allStops = () => {
+    if (stopsOf !== nav.transit) {
+      stopsOf = nav.transit
+      stopsAll = nav.transit ? nav.transit.buses.flatMap((l) => l.stops) : []
+    }
+    return stopsAll
+  }
+  const carPeople = [] // (step: friends on foot to stop for when you drive)
   const step = (dtIn) => {
     if (disposed || suspended) return
     const dt = Math.min(0.1, dtIn)
@@ -1597,7 +1697,6 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
     const kx = (keys.has("ArrowRight") || keys.has("KeyD") ? 1 : 0) - (keys.has("ArrowLeft") || keys.has("KeyA") ? 1 : 0)
     const ky = (keys.has("ArrowUp") || keys.has("KeyW") ? 1 : 0) - (keys.has("ArrowDown") || keys.has("KeyS") ? 1 : 0)
     const shift = keys.has("ShiftLeft") || keys.has("ShiftRight")
-    const people = [...remotes.values()].filter((r) => !(r.act & (ACT.drive | ACT.ride))).map((r) => ({ x: r.x, z: r.z }))
     if (driving && car?.auto) {
       // (your ride drives itself: stepRide)
     } else if (onTransit) {
@@ -1615,6 +1714,10 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
       const gas = Math.max(two ? st.gas : input.gas, ky > 0 ? 1 : 0)
       const brake = Math.max(two ? st.brake : input.brake, ky < 0 ? 1 : 0)
       const steer = Math.max(-1, Math.min(1, (two ? st.steer : input.steer) + kx))
+      // (friends on foot, to stop for: one array reused frame to frame)
+      const people = carPeople
+      people.length = 0
+      for (const r of remotes.values()) if (!(r.act & (ACT.drive | ACT.ride))) people.push(r)
       stepCar(car, { gas, brake, steer }, dt, { resolve: resolveCar, heightAt: (x, z, y) => heightAt(x, z, y, !two), blocked: (x, z, yaw, dir, m) => personAhead(people, x, z, yaw, dir, m) })
     } else if (riding) {
       const r = remotes.get(riding.num)
@@ -1648,7 +1751,7 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
     stepRide(dt)
     stepRemotes()
     for (const p of plugins) p.step?.(dt)
-    eggs.step(dt, center(), clock, camera)
+    eggs.step(dt, centerNow(), clock, camera)
     updateCamera(dt)
     // (the sky dome rides with the lens: the town is bigger than the dome)
     // (the dome is centred on the eye, height too: at y 0 its horizon sat above the eye wherever the
@@ -1816,7 +1919,7 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
         route: gps ? gps.route.pts : null,
         dest: gps ? gps.dest : null,
         ride: ride ? { x: ride.pose.x, z: ride.pose.z, phase: ride.phase } : null,
-        stops: nav.transit ? nav.transit.buses.flatMap((l) => l.stops).filter((s) => Math.abs(s.x - c.x) < 1500 && Math.abs(s.z - c.z) < 1500) : [],
+        stops: nav.transit ? allStops().filter((s) => Math.abs(s.x - c.x) < 1500 && Math.abs(s.z - c.z) < 1500) : [],
         stations: nav.transit?.stations || [],
         // (your own Home/Work and the places friends share with you: roam/life/town.js)
         pins: [...plugins].flatMap((p) => p.pins?.() || []),
@@ -2323,7 +2426,9 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
       const list = tilesAround(frame, c.x, c.z, 300)
       store.want(list)
       await store.whenLoaded(list)
-      for (let i = 0; i < 4; i++) stepTiles(0)
+      // (left before the tiles came: nothing to build into)
+      if (disposed) return
+      for (let i = 0; i < 4; i++) stepTiles(0, true)
     },
     dispose() {
       disposed = true
@@ -2347,6 +2452,8 @@ export const createRoam = ({ town, host = {}, phone = false, quality = "medium",
       pedFigs.clear()
       eggs.dispose()
       sky?.dispose?.()
+      // (the sun's shadow map: a render target on the engine's renderer, which outlives the world)
+      sun.dispose()
       disposeMaterials()
       for (const el of labelPool) el.remove()
     },

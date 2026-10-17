@@ -18,12 +18,14 @@ export const Recorder = ({ onDone, onCancel }) => {
   const rec = useRef(null)
   const chunks = useRef([])
   const lock = useRef(null)
+  const mounted = useRef(true)
   const [state, setState] = useState("starting") // starting | ready | recording | error
   const [error, setError] = useState(null)
   const [secs, setSecs] = useState(0)
 
   useEffect(() => {
     let live = true
+    mounted.current = true
     const start = async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("This browser can't use the camera here.")
@@ -41,6 +43,7 @@ export const Recorder = ({ onDone, onCancel }) => {
     start()
     return () => {
       live = false
+      mounted.current = false
       rec.current?.state === "recording" && rec.current.stop()
       stream.current?.getTracks().forEach((t) => t.stop())
       lock.current?.release?.().catch?.(() => {})
@@ -56,7 +59,7 @@ export const Recorder = ({ onDone, onCancel }) => {
       })
     }, 1000)
     return () => clearInterval(id)
-  })
+  }, [state])
 
   const begin = async () => {
     const type = pickType()
@@ -66,20 +69,33 @@ export const Recorder = ({ onDone, onCancel }) => {
       return
     }
     chunks.current = []
-    const r = new MediaRecorder(stream.current, { ...(type ? { mimeType: type } : {}), videoBitsPerSecond: 2_500_000 })
-    r.ondataavailable = (e) => e.data?.size && chunks.current.push(e.data)
-    r.onstop = () => {
-      const blob = new Blob(chunks.current, { type: r.mimeType || type || "video/mp4" })
+    let r
+    try {
+      r = new MediaRecorder(stream.current, { ...(type ? { mimeType: type } : {}), videoBitsPerSecond: 2_500_000 })
+      r.ondataavailable = (e) => e.data?.size && chunks.current.push(e.data)
+      r.onstop = () => {
+        const blob = new Blob(chunks.current, { type: r.mimeType || type || "video/mp4" })
+        stream.current?.getTracks().forEach((t) => t.stop())
+        lock.current?.release?.().catch?.(() => {})
+        onDone(blob)
+      }
+      r.start(1000)
+    } catch (e) {
+      // (the browser turned this camera's recording down: say so, and the camera goes off)
       stream.current?.getTracks().forEach((t) => t.stop())
-      lock.current?.release?.().catch?.(() => {})
-      onDone(blob)
+      stream.current = null
+      setError(`This browser couldn't start recording (${e?.message || e}). Film with the Camera app and open the video here.`)
+      setState("error")
+      return
     }
-    r.start(1000)
     rec.current = r
     setSecs(0)
     setState("recording")
     try {
-      lock.current = await navigator.wakeLock?.request("screen")
+      const l = await navigator.wakeLock?.request("screen")
+      // (left, or stopped, while it was being asked for: let it go again)
+      if (!mounted.current || rec.current !== r || r.state !== "recording") l?.release?.().catch?.(() => {})
+      else lock.current = l
     } catch {
       // (no wake lock: the phone may dim; recording carries on)
     }

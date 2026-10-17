@@ -253,7 +253,8 @@
   gap: 4px;
   flex-wrap: wrap;
 }
-.pbRoundTools select {
+.pbRoundTools select,
+.pbRoundTools .selCombo {
   flex: 1;
   min-width: 140px;
 }
@@ -337,7 +338,8 @@
   gap: 4px;
   flex-wrap: wrap;
 }
-.pbPick select {
+.pbPick select,
+.pbPick .selCombo {
   flex: 1;
   min-width: 140px;
 }
@@ -503,7 +505,8 @@
   gap: 4px;
   align-items: center;
 }
-.pbSeg select {
+.pbSeg select,
+.pbSeg .selCombo {
   margin-left: auto;
 }
 .pbTable {

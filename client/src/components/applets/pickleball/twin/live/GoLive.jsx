@@ -56,15 +56,29 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
   const dotsRef = useRef(null)
   const wakeRef = useRef(null)
   const statusRef = useRef("")
+  const mountedRef = useRef(true)
+  const onAirRef = useRef(false) // the server has our broadcast (bc:start answered, not stopped yet)
+  const startingRef = useRef(false) // goLive under way (a second tap on "Go live" waits)
+  const rosterRef = useRef(null) // the roster event sent at the start (re-sent to check we're still on air)
+  const endRef = useRef({}) // { finish, lost }: the latest, for the socket listeners
+  const wasOnlineRef = useRef(false)
   const online = net?.status === "online"
   const real = venueChoices().find((v) => v.id === venue)?.real
 
   useEffect(() => {
     if (!real) return setCourts([])
-    courtsOf(venue).then((cs) => {
-      setCourts(cs)
-      setCourt((c) => (cs.some((x) => String(x.id) === String(c)) ? c : cs[0]?.id ?? null))
-    })
+    let live = true
+    // (only the venue still picked: a slower earlier one mustn't put its courts here)
+    courtsOf(venue)
+      .then((cs) => {
+        if (!live) return
+        setCourts(cs)
+        setCourt((c) => (cs.some((x) => String(x.id) === String(c)) ? c : cs[0]?.id ?? null))
+      })
+      .catch(() => live && setCourts([]))
+    return () => {
+      live = false
+    }
   }, [venue, real])
 
   const roster = useMemo(() => Array.from({ length: players }, (_, i) => ({ name: (names[i] || "").trim() || `Player ${i + 1}`, team: i < players / 2 ? 0 : 1 })), [players, names])
@@ -72,7 +86,12 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
   const courtName = courts.find((c) => String(c.id) === String(court))?.name || null
 
   // the camera (back camera, sound without the phone's voice processing: the paddle pop)
+  const [opening, setOpening] = useState(false)
   const openCamera = async () => {
+    // (one ask at a time: a second tap while the browser asks would swap the stream under a
+    // preview that's already showing the first one)
+    if (opening) return
+    setOpening(true)
     setError(null)
     try {
       let stream
@@ -82,10 +101,16 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
         // (no microphone allowed: the camera alone still works, hits come from the swings)
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } })
       }
+      // (left the screen while the browser asked: the camera goes off again)
+      if (!mountedRef.current) return stream.getTracks().forEach((t) => t.stop())
+      // (a second tap while the first was asking: one camera, not two)
+      streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = stream
       setStep("camera")
     } catch (e) {
       setError(e?.name === "NotAllowedError" ? "Pickleball 98 needs the camera to go live. Allow it in the browser's settings." : `The camera didn't start (${e?.message || e}).`)
+    } finally {
+      if (mountedRef.current) setOpening(false)
     }
   }
   useEffect(() => {
@@ -94,7 +119,7 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
       v.srcObject = streamRef.current
       v.play().catch(() => {})
     }
-  })
+  }, [step])
   const snap = async () => {
     const v = videoRef.current
     for (let i = 0; i < 50 && (!v || v.readyState < 2); i++) await new Promise((r) => setTimeout(r, 100))
@@ -103,7 +128,16 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
   }
 
   // go live: the server first (the id and link), then the reader
-  const goLive = async ({ taps: t, players: p }) => {
+  const goLive = async (args) => {
+    if (startingRef.current) return
+    startingRef.current = true
+    try {
+      await startBroadcast(args)
+    } finally {
+      startingRef.current = false
+    }
+  }
+  const startBroadcast = async ({ taps: t, players: p }) => {
     setTaps(t)
     setPlayers(p)
     setError(null)
@@ -111,12 +145,20 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
     const list = Array.from({ length: p }, (_, i) => roster[i] || { name: `Player ${i + 1}`, team: i < p / 2 ? 0 : 1 })
     const r = await net.request("bc:start", { title: title.trim() || `${myName || "A"} game at ${venueName}`, venue, court, venueName, courtName, players: list, notify })
     if (!r?.ok) return setError(r?.error || "Couldn't go live.")
+    onAirRef.current = true
+    // (left the screen, or Back, while the server answered: no broadcast without a camera)
+    if (!mountedRef.current || !streamRef.current) {
+      onAirRef.current = false
+      net.request("bc:stop", {})
+      return
+    }
     setCast({ id: r.id, code: r.code })
     // (dev: what the browser tests read)
     if (import.meta.env?.DEV) window.__goLive = { id: r.id, code: r.code, own: () => ownRef.current, stats: () => liveRef.current?.stats() || null, sent: [] }
     const own = createStream({ players: list, keep: Infinity })
     ownRef.current = own
     const rosterEvent = { k: "roster", t: 0, players: list }
+    rosterRef.current = rosterEvent
     own.addEvent(rosterEvent)
     net.request("bc:ev", rosterEvent)
     setScore(newScore({ format: p === 2 ? "singles" : "doubles" }))
@@ -126,27 +168,49 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
     } catch {
       // (no wake lock: the phone's own auto-lock setting applies)
     }
-    liveRef.current = await startLive({
-      video: videoRef.current,
-      stream: streamRef.current,
-      taps: t,
-      players: p,
-      onStatus: setStatus,
-      onTick: (bytes, { t }) => {
-        own.addTick(bytes)
-        if (import.meta.env?.DEV) (window.__goLive.sent ||= []).push([Date.now(), Math.round(t * 1000) / 1000, bytes.length])
-        if (net.socket?.connected) net.socket.volatile.emit("bc:tick", bytes)
-      },
-      onHit: (e) => {
-        own.addEvent(e)
-        net.request("bc:ev", e)
-      },
-      onFrame: ({ tracks, slots }) => {
-        // (the reader's start-up words go once it's reading)
-        if (statusRef.current) setStatus("")
-        drawDots(tracks, slots)
-      },
-    })
+    let handle
+    try {
+      handle = await startLive({
+        video: videoRef.current,
+        stream: streamRef.current,
+        taps: t,
+        players: p,
+        onStatus: setStatus,
+        onTick: (bytes, { t }) => {
+          own.addTick(bytes)
+          if (import.meta.env?.DEV) (window.__goLive.sent ||= []).push([Date.now(), Math.round(t * 1000) / 1000, bytes.length])
+          if (net.socket?.connected) net.socket.volatile.emit("bc:tick", bytes)
+        },
+        onHit: (e) => {
+          own.addEvent(e)
+          net.request("bc:ev", e)
+        },
+        onFrame: ({ tracks, slots }) => {
+          // (the reader's start-up words go once it's reading)
+          if (statusRef.current) setStatus("")
+          drawDots(tracks, slots)
+        },
+      })
+    } catch (e) {
+      // (the pose model didn't load, say: not stuck on "Starting..." with the broadcast on)
+      wakeRef.current?.release?.().catch(() => {})
+      wakeRef.current = null
+      if (!onAirRef.current || !mountedRef.current) return
+      onAirRef.current = false
+      net.request("bc:stop", {})
+      setCast(null)
+      setStatus("")
+      setError(`Couldn't start reading the camera (${e?.message || e}).`)
+      setStep("camera")
+      return
+    }
+    // (ended, or left the screen, while it was starting: stop it again)
+    if (!onAirRef.current || !mountedRef.current) {
+      handle.stop()
+      wakeRef.current?.release?.().catch(() => {})
+      return
+    }
+    liveRef.current = handle
     setStatus("")
   }
 
@@ -186,7 +250,13 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
       setReactions((r) => [...r.slice(-8), { id, e: d.e, name: d.name }])
       setTimeout(() => setReactions((r) => r.filter((x) => x.id !== id)), 2600)
     }
-    const onEnd = (d) => d?.id === cast.id && step === "live" && finish(false)
+    const onEnd = (d) => {
+      if (d?.id !== cast.id || step !== "live") return
+      // (ended by us or its time limit: over; dropped with the connection, say: go live again)
+      if (d.reason === "ended" || d.reason === "time") endRef.current.finish(false)
+      // (once: the reconnect check may already have found it gone)
+      else if (onAirRef.current) endRef.current.lost()
+    }
     s.on("bc:info", onInfo)
     s.on("bc:react", onReact)
     s.on("bc:end", onEnd)
@@ -195,7 +265,18 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
       s.off("bc:react", onReact)
       s.off("bc:end", onEnd)
     }
-  })
+  }, [net?.socket, cast, step])
+  // back online after a dropped connection: is the broadcast still on the server? (the roster
+  // again, harmless; "You're not live." means the server ended it while we were away)
+  useEffect(() => {
+    const back = online && !wasOnlineRef.current
+    wasOnlineRef.current = online
+    if (!back || !onAirRef.current || !rosterRef.current) return
+    net.request("bc:ev", rosterRef.current).then((r) => {
+      if (!r?.ok && onAirRef.current && mountedRef.current && /not live/i.test(r?.error || "")) endRef.current.lost()
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
   useEffect(() => {
     if (step !== "live") return
     const id = setInterval(() => liveRef.current && setStats(liveRef.current.stats()), 1000)
@@ -213,7 +294,8 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
 
   const share = () => {
     if (!cast) return
-    const url = `${location.origin}/?open=program&name=Pickleball%2098&live=${cast.id}&code=${cast.code}`
+    // (utils/deepLink.js reads it: the game opens straight to watching)
+    const url = `${location.origin}/?live=${encodeURIComponent(cast.id)}&code=${encodeURIComponent(cast.code)}`
     shareOut({ title: "Watch my game live", text: `I'm live at ${venueName}: watch it in 3D in Pickleball 98`, url }, "apps", { title: "Live game" })
   }
 
@@ -224,36 +306,67 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
   const finish = async (tell = true) => {
     const live = liveRef.current
     liveRef.current = null
+    onAirRef.current = false
     await live?.stop()
     if (tell) net?.request("bc:stop", {})
     stopCamera()
     wakeRef.current?.release?.().catch(() => {})
     setStep("ended")
-    // what was sent, kept as a Twin Replay game (tracked data: a few hundred KB an hour)
+    await keepOwn()
+  }
+  // what was sent, kept as a Twin Replay game (tracked data: a few hundred KB an hour)
+  const keepOwn = async () => {
     const own = ownRef.current
+    ownRef.current = null
     if (own && own.newest > 5) {
       try {
         const analysis = own.toAnalysis()
         const g = { id: newId(), title: title.trim() || `Live at ${venueName}`, created: Date.now() - Math.round(own.newest * 1000), duration: analysis.duration, venue: real ? venue : null, court: real ? court : null, analysis, live: true, thumb: null }
         await putGame(g)
         setSaved(g)
+        return g
       } catch (e) {
         setError(e.message)
       }
     }
+    return null
   }
+  // the server ended the broadcast while we were away (a dropped connection): not LIVE any
+  // more; the camera stays on and "Go live" starts a new one
+  const lost = async () => {
+    const live = liveRef.current
+    liveRef.current = null
+    onAirRef.current = false
+    rosterRef.current = null
+    await live?.stop()
+    wakeRef.current?.release?.().catch(() => {})
+    wakeRef.current = null
+    if (!mountedRef.current) return
+    setCast(null)
+    setStatus("")
+    setStats(null)
+    setViewers(0)
+    setScore(null)
+    setStep("camera")
+    const g = await keepOwn()
+    setError(`The broadcast ended while the connection was down${g ? ` (what was sent is kept in Twin Replay as "${g.title}")` : ""}. Tap Go live to start again.`)
+  }
+  endRef.current = { finish, lost }
   // leaving the screen mid-broadcast ends it
-  useEffect(
-    () => () => {
-      if (liveRef.current) {
-        liveRef.current.stop()
-        net?.request("bc:stop", {})
-      }
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      liveRef.current?.stop()
+      liveRef.current = null
+      // (also while it was still starting: the server has it from bc:start on)
+      if (onAirRef.current) net?.request("bc:stop", {})
+      onAirRef.current = false
       stopCamera()
-    },
+      wakeRef.current?.release?.().catch(() => {})
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  )
+  }, [])
 
   return (
     <div className="pkTwin pkLive" data-view={step}>
@@ -315,7 +428,7 @@ export default function GoLive({ onExit, onOpenTwin = null }) {
               <button type="button" onClick={onExit}>
                 Back
               </button>
-              <button type="button" className="pkPrimary" onClick={openCamera} data-action="live-camera">
+              <button type="button" className="pkPrimary" onClick={openCamera} disabled={opening} data-action="live-camera">
                 Point the camera
               </button>
             </div>

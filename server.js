@@ -55,6 +55,14 @@ const parkFinds = createParkFinds()
 // Explore's private Home/Work places, the Bag and gifts per player (server/roam/life.js)
 const roamLife = createRoamLife({ aim: () => players })
 app.use("/api/roamlife", roamLife.router())
+// errors no route answered (bad JSON, too big a body, a route that threw): a short JSON answer
+// the game shows, never Express's HTML page with the server's stack trace
+app.use((error, request, response, next) => {
+  if (response.headersSent) return next(error)
+  const status = Number(error?.status || error?.statusCode) || 500
+  if (status >= 500) console.error("[http]", request.method, request.path, error?.message)
+  response.status(status).json({ error: status === 413 ? "That's too big to send." : status < 500 ? "The game couldn't read that request." : "Something went wrong on the server. Try again in a minute." })
+})
 
 // DELETE /api/players/me: everything kept for a player, in order, then the player
 players.useEraser(async (ctx) => {

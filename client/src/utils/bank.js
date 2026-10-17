@@ -87,7 +87,12 @@ let shared = null
 // the page's bank: the park and Explore share it, and other tabs' changes come in
 export const getBank = () => {
   if (!shared) {
-    shared = createBank()
+    // (reading localStorage throws where storage is blocked: the chips last for this visit then)
+    let storage = null
+    try {
+      storage = globalThis.localStorage
+    } catch {}
+    shared = createBank(storage)
     try {
       globalThis.addEventListener?.("storage", (e) => {
         if (!e.key || e.key.endsWith(KEY)) shared.reload()

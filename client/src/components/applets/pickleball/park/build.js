@@ -244,8 +244,8 @@ export const buildPark = (scene, { quality = "medium", layout = RIVERSIDE_LAYOUT
   // (a venue on Medium/High, detail.js: a woven wire with a highlight, lit, and its cut-out shadow)
   const wire = S && quality !== "low" ? chainLink(S?.colors?.fence ? parseInt(S.colors.fence.slice(1), 16) : null) : null
   const fenceMat = wire
-    ? keep(new THREE.MeshLambertMaterial({ map: keep(wire.tex), transparent: true, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.05 }))
-    : keep(new THREE.MeshBasicMaterial({ map: fenceTex, transparent: true, side: THREE.DoubleSide, depthWrite: false }))
+    ? keep(new THREE.MeshLambertMaterial({ map: keep(wire.tex), transparent: true, forceSinglePass: true, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.05 }))
+    : keep(new THREE.MeshBasicMaterial({ map: fenceTex, transparent: true, forceSinglePass: true, side: THREE.DoubleSide, depthWrite: false }))
   // (Medium/High: a woven screen with hems and grommets, detail.js)
   const screenMat = lambert(S?.colors?.windscreen ? new THREE.Color(S.colors.windscreen).getHex() : 0x1f4a37, { side: THREE.DoubleSide, ...(wire ? { map: keep(windscreenTex()) } : {}) })
   const railMat = lambert(S?.colors?.fence ? parseInt(S.colors.fence.slice(1), 16) : 0x3d4a45)
@@ -337,7 +337,7 @@ export const buildPark = (scene, { quality = "medium", layout = RIVERSIDE_LAYOUT
     const col = new THREE.Color(c).getHex()
     const w = S && quality !== "low" ? chainLink(col) : null
     let m
-    if (w) m = { mat: keep(new THREE.MeshLambertMaterial({ map: keep(w.tex), transparent: true, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.05 })), depth: w.depth }
+    if (w) m = { mat: keep(new THREE.MeshLambertMaterial({ map: keep(w.tex), transparent: true, forceSinglePass: true, side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.05 })), depth: w.depth }
     else {
       const t = keep(
         canvasTexture(64, 64, (ctx, s) => {
@@ -354,7 +354,7 @@ export const buildPark = (scene, { quality = "medium", layout = RIVERSIDE_LAYOUT
         })
       )
       t.wrapS = t.wrapT = THREE.RepeatWrapping
-      m = { mat: keep(new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide, depthWrite: false })), depth: null }
+      m = { mat: keep(new THREE.MeshBasicMaterial({ map: t, transparent: true, forceSinglePass: true, side: THREE.DoubleSide, depthWrite: false })), depth: null }
     }
     meshMats.set(c, m)
     return m
@@ -1202,6 +1202,8 @@ export const buildPark = (scene, { quality = "medium", layout = RIVERSIDE_LAYOUT
       precip?.dispose()
       surfWet.value = 0
       disposables.forEach((d) => d.dispose?.())
+      // (the sun's shadow map: a render target three.js keeps until the light is disposed)
+      sun.dispose()
       rackPaddles.dispose?.()
       rackHandles.dispose?.()
     },

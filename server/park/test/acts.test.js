@@ -89,3 +89,22 @@ test("parkact: settings and relay messages are checked", () => {
   assert.equal(deep.list.length, 24)
   assert.equal(deep.a.b, null)
 })
+
+test("an activity together that can't start: both are taken out of the room, not just the host", () => {
+  const { park, rooms, me, got, at } = setup()
+  park.join(me(1), { venue: "loscab" })
+  const b = park.join(me(2), { venue: "loscab" })
+  at("pid1", 0, 0)
+  at("pid2", 2, 0)
+  const realStart = rooms.start
+  rooms.start = () => ({ ok: false, error: "No." })
+  try {
+    const r = park.tgAsk("pid1", { to: b.you, kind: "tennis", data: { spot: "tennis1", mode: "rally" } })
+    park.tgAnswer("pid2", { id: r.id, yes: true })
+  } finally {
+    rooms.start = realStart
+  }
+  assert.equal(got("pid1", "park:act").length, 0)
+  assert.equal(rooms.roomOf("pid1"), null)
+  assert.equal(rooms.roomOf("pid2"), null)
+})

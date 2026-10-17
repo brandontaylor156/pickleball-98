@@ -39,10 +39,14 @@ export default function LiveWatch({ getEngine, id, code = null, onExit }) {
   const startedRef = useRef(false)
   const rewoundRef = useRef(false) // the viewer chose to watch from behind (10 s back)
   const socket = net?.socket
+  const status = net?.status
 
-  // join: the last minute comes with it (late joiners see the game right away)
+  // join: the last minute comes with it (late joiners see the game right away); again when
+  // the connection comes back (the server forgets a viewer whose connection dropped)
   useEffect(() => {
-    if (!socket || net?.status !== "online") {
+    // (opened by a link: the connection may still be starting; this runs again once it's up)
+    if (socket && status === "connecting") return
+    if (!socket || status !== "online") {
       setError("Watching needs the network. Check you're online and try again.")
       return
     }
@@ -69,14 +73,19 @@ export default function LiveWatch({ getEngine, id, code = null, onExit }) {
     socket.on("bc:end", onEnd)
     net.request("bc:watch", id ? { id, code } : { code }).then((r) => {
       if (!live) return
+      // (gone while the connection was down: it's over, and what came in can still be kept)
+      // (only when it's really gone: a full house or a hiccup says so instead of "over")
+      if (!r?.ok && streamRef.current && /isn't live/i.test(r?.error || "")) return setError(null), setEnded((x) => x || "ended")
       if (!r?.ok) return setError(r?.error || "That game isn't live anymore.")
-      const s = createStream({ players: r.info.players })
+      // (back after a dropped connection: the same stream, the missed ticks added to it)
+      const s = streamRef.current || createStream({ players: r.info.players })
       for (const e of r.events || []) s.addEvent(e)
       for (const b of r.ring ? splitTicks(r.ring) : []) s.addTick(b)
       streamRef.current = s
+      setError(null)
       setScore(s.score || r.info.score || null)
       setViewers(r.viewers || 1)
-      setInfo(r.info)
+      setInfo((old) => old || r.info)
     })
     return () => {
       live = false
@@ -88,7 +97,7 @@ export default function LiveWatch({ getEngine, id, code = null, onExit }) {
       if (socket.connected) socket.emit("bc:unwatch", {}, () => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, id, code])
+  }, [socket, status, id, code])
 
   // the engine: started on the first frames, then fed as the buffer fills
   useEffect(() => {
@@ -102,7 +111,10 @@ export default function LiveWatch({ getEngine, id, code = null, onExit }) {
         courtId = cs.find((c) => String(c.id) === String(info.court))?.id ?? cs[0]?.id ?? null
       }
       venue = await twinVenue(info.venue || "stadium", courtId)
-    })()
+    })().catch(() => {
+      // (the venue's files didn't load: the game's own court, not "Waiting..." forever)
+      venue = "stadium"
+    })
     const id_ = setInterval(() => {
       const s = streamRef.current
       const e = getEngine()

@@ -381,6 +381,7 @@ export const studioShot = (ctx, { looks = [{}], state = "ready", cam = "close", 
     scene.remove(f.fig.group, f.ball)
     f.fig.dispose()
     f.ball.geometry.dispose()
+    f.ball.material.dispose()
   }
   lineup = []
   const n = looks.length

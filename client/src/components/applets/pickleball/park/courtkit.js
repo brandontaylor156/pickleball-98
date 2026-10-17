@@ -101,7 +101,7 @@ export const createCourtKit = ({ keep, std, colors = {}, runoff = null }) => {
     })
   )
   netTex.wrapS = netTex.wrapT = THREE.RepeatWrapping
-  mats.net = keep(new THREE.MeshBasicMaterial({ map: netTex, transparent: true, side: THREE.DoubleSide, depthWrite: false }))
+  mats.net = keep(new THREE.MeshBasicMaterial({ map: netTex, transparent: true, forceSinglePass: true, side: THREE.DoubleSide, depthWrite: false }))
   mats.tape = keep(new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }))
 
   // ---- pickleball (a court's own frame: the net along x, the length along z) ----

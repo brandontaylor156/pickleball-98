@@ -310,7 +310,7 @@ export const buildVenue = (scene,{ venue = "park", quality = "medium" } = {}) =>
   netGeo.setAttribute("position", new THREE.Float32BufferAttribute(netPos, 3))
   netGeo.setAttribute("uv", new THREE.Float32BufferAttribute(netUv, 2))
   netGeo.setIndex(netIdx)
-  const net = new THREE.Mesh(netGeo, keep(new THREE.MeshBasicMaterial({ map: netTex, transparent: true, side: THREE.DoubleSide, depthWrite: false })))
+  const net = new THREE.Mesh(netGeo, keep(new THREE.MeshBasicMaterial({ map: netTex, transparent: true, forceSinglePass: true, side: THREE.DoubleSide, depthWrite: false })))
   net.renderOrder = 2
   group.add(net)
   const tapeGeo = keep(new THREE.BufferGeometry())
@@ -439,7 +439,7 @@ export const buildVenue = (scene,{ venue = "park", quality = "medium" } = {}) =>
       { w: 2 * FZ, x: -FX, z: 0, ry: Math.PI / 2 },
       { w: 2 * FZ, x: FX, z: 0, ry: -Math.PI / 2 },
     ]
-    const fenceMat = keep(new THREE.MeshBasicMaterial({ map: fenceTex, transparent: true, side: THREE.DoubleSide, depthWrite: false }))
+    const fenceMat = keep(new THREE.MeshBasicMaterial({ map: fenceTex, transparent: true, forceSinglePass: true, side: THREE.DoubleSide, depthWrite: false }))
     const screenMat = lambert(0x1f4a37, { side: THREE.DoubleSide })
     const railMat = lambert(0x3d4a45)
     for (const s of sides) {
@@ -464,7 +464,8 @@ export const buildVenue = (scene,{ venue = "park", quality = "medium" } = {}) =>
     const posts = []
     for (let x = -FX; x <= FX + 0.01; x += (2 * FX) / 4) posts.push([x, -FZ], [x, FZ])
     for (let z = -FZ + (2 * FZ) / 8; z < FZ - 0.01; z += (2 * FZ) / 8) posts.push([-FX, z], [FX, z])
-    const postMesh = new THREE.InstancedMesh(postGeo, railMat, posts.length)
+    // (its own material: one shared by a plain mesh and an instanced one switches program every frame)
+    const postMesh = new THREE.InstancedMesh(postGeo, lambert(0x3d4a45), posts.length)
     const m4 = new THREE.Matrix4()
     posts.forEach(([x, z], i) => postMesh.setMatrixAt(i, m4.makeTranslation(x, fenceH / 2, z)))
     group.add(postMesh)
@@ -907,6 +908,8 @@ export const buildVenue = (scene,{ venue = "park", quality = "medium" } = {}) =>
       setWindStrength(2)
       scene.remove(group)
       disposables.forEach((d) => d.dispose?.())
+      // (the sun's 2048 shadow map: a render target three.js keeps until the light is disposed)
+      sun.dispose()
     },
   }
 }

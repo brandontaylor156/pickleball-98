@@ -1,7 +1,9 @@
 // Roam life on the in-game phone: Places (your private Home and Work: set them on a building, go
 // there, share them with a buddy) and Bag (what you bought, gifts waiting, using things). The
 // phone (RoamPhone.jsx) shows them; `life` is the page's handful of actions (Pickleball.jsx):
-//   { eat(itemId), put(kind), ride(model, color), equip(id), gift(id), travel(place) }
+//   { eat(itemId), put(itemId), ride(itemId), equip(itemId), gift(itemId), travel(place) }
+// (each takes the Bag item's id: ride(id) looks up its model and colour and calls
+// world.rideOwn(model, color) itself; useExploreLife.jsx phoneLife)
 // and world.host.life is the store (utils/roamLife.js through host98.js).
 
 import React, { useEffect, useMemo, useState } from "react"
@@ -174,11 +176,13 @@ export function BagApp({ world, life }) {
     const it = itemOf(id)
     const u = it?.use || {}
     let r = { ok: false, error: "Nothing to do with that." }
-    if (u.eat) r = await life.eat(id)
-    else if (u.place) r = await life.put(id)
-    else if (u.ride) r = await life.ride(id)
-    else if (u.paddle || u.balls || u.wear) r = await life.equip(id)
-    setMsg(r.ok ? r.text || "Done." : r.error)
+    // (the page's actions may not be there: the phone opened without them)
+    if (!life) r = { ok: false, error: "That isn't available here." }
+    else if (u.eat) r = await life.eat?.(id)
+    else if (u.place) r = await life.put?.(id)
+    else if (u.ride) r = await life.ride?.(id)
+    else if (u.paddle || u.balls || u.wear) r = await life.equip?.(id)
+    setMsg(r?.ok ? r.text || "Done." : r?.error || "That didn't work.")
   }
   const w = s.work || { secs: 0, shifts: 0 }
   return (
@@ -231,7 +235,7 @@ export function BagApp({ world, life }) {
                       {verb}
                     </button>
                   )}
-                  <button type="button" onClick={() => life.gift(id)} data-life={`give-${id}`}>
+                  <button type="button" onClick={() => life?.gift?.(id)} data-life={`give-${id}`}>
                     Give
                   </button>
                 </span>

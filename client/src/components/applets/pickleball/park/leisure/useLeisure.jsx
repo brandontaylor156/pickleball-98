@@ -51,6 +51,9 @@ export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = f
   runRef.current = run
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
+  const worldRef = useRef(world)
+  worldRef.current = world
+  const startNo = useRef(0) // (the latest start wins; out of the park, none)
   const pendingTreat = useRef(null) // { item, name }
   const musicWas = useRef(null)
   const say = (text, sec = 3.6) => setNote({ text, id: Date.now(), sec })
@@ -142,9 +145,10 @@ export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = f
       world.leisure.setHeld(null)
       setHeldState(null)
     }
-    await world.leisure.waterReady
+    const n = ++startNo.current
     let r = null
     try {
+      await world.leisure.waterReady
       const at = world.info?.me || null
       if (spot.kind === "swim") {
         const { createSwimRun } = await import("./swimRun.js")
@@ -182,6 +186,15 @@ export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = f
       return
     }
     if (!r) return
+    // (left the park, or started something else, while it loaded)
+    if (n !== startNo.current || worldRef.current !== world) {
+      // (the soak's music back as it was)
+      if (r.kind === "tub" && !runRef.current && musicWas.current !== null) {
+        if (!musicWas.current) setPrefs({ parkMusic: false })
+        musicWas.current = null
+      }
+      return
+    }
     r.unsub = r.subscribe((h) => setHud(h))
     world.setActivity(r)
     setRun(r)
@@ -190,6 +203,7 @@ export const useLeisure = ({ world, prefs, setPrefs, mobile = false, showPad = f
     if (spot.kind === "tub") setPrefs({ leisure: { ...L, soaks: (L.soaks || 0) + 1 } })
   }
   function stopRun(save = true) {
+    startNo.current++
     const r = runRef.current
     if (!r) return
     runRef.current = null

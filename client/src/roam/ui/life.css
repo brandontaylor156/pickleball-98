@@ -4,6 +4,11 @@
   font-size: 14px;
   min-height: 42px;
 }
+/* (the GPS banner pushes the first action down 64px (getaround.css): the second goes with it,
+   or it sat over the first) */
+.roamHud.has-gps .roamAction2 {
+  margin-top: 64px;
+}
 .rlfEmoteBtn {
   font-size: 18px;
   padding: 4px 8px;
@@ -100,15 +105,26 @@
   font-weight: bold;
   background: #b9e6a8;
 }
+/* (under the minimap (roam.css .roamMap: top 100px, 92px across on a phone, 124 with room for
+   it, RoamHud.jsx mapSize): at 140px "Let go" / "Stand up" sat over it at 390x844) */
 .rlfChips {
   position: absolute;
   z-index: 7;
   left: calc(8px + env(safe-area-inset-left, 0px));
-  top: calc(140px + env(safe-area-inset-top, 0px));
+  top: calc(200px + env(safe-area-inset-top, 0px));
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-family: Tahoma, Verdana, "Segoe UI", sans-serif;
+}
+@media (min-width: 601px) and (min-height: 601px) {
+  .rlfChips {
+    top: calc(232px + env(safe-area-inset-top, 0px));
+  }
+}
+/* (the GPS banner pushes the minimap down 64px (getaround.css): the chips go with it) */
+body:has(.roamHud.has-gps) .rlfChips {
+  margin-top: 64px;
 }
 .rlfNote {
   position: absolute;

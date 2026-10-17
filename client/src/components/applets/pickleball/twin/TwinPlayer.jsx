@@ -56,7 +56,8 @@ export const TwinPlayer = ({ getEngine, game, video, onBack, onChange, onShare, 
     let live = true
     setBusy(true)
     ;(async () => {
-      const venue = await twinVenue(game.venue || "stadium", game.court)
+      // (the venue's files didn't load: the game's own court rather than a dead Play button)
+      const venue = await twinVenue(game.venue || "stadium", game.court).catch(() => "stadium")
       if (!live) return
       const { frames } = buildFrames(analysis, window_)
       const e = getEngine()
@@ -90,10 +91,15 @@ export const TwinPlayer = ({ getEngine, game, video, onBack, onChange, onShare, 
     },
     [getEngine],
   )
-  // the scrubber and the video follow the engine
+  // the scrubber and the video follow the engine (one interval while on the replay tab; it
+  // reads this render's rally window and play-all choice through a ref)
+  const followRef = useRef(null)
+  const advancedRef = useRef(false)
+  followRef.current = { window_, playAll, ri, count: rallies.length }
   useEffect(() => {
     if (tab !== "replay") return
     const id = setInterval(() => {
+      const { window_, playAll, ri, count } = followRef.current
       const s = getEngine()?.twinState()
       if (!s) return
       setSt(s)
@@ -105,13 +111,26 @@ export const TwinPlayer = ({ getEngine, game, video, onBack, onChange, onShare, 
         if (s.paused && !v.paused) v.pause()
         else if (!s.paused && v.paused) v.play().catch(() => {})
       }
-      if (s.ended && playAll && ri < rallies.length - 1) setRi((i) => i + 1)
+      // (once per rally's end: the engine says "ended" until the next rally has started)
+      if (!s.ended) advancedRef.current = false
+      else if (playAll && ri < count - 1 && !advancedRef.current) {
+        advancedRef.current = true
+        setRi((i) => i + 1)
+      }
     }, 120)
     return () => clearInterval(id)
-  })
+  }, [tab, getEngine])
   useEffect(() => {
-    if (game.venue && venueChoices().find((v) => v.id === game.venue)?.real) courtsOf(game.venue).then(setCourts)
+    let live = true
+    // (only the venue still picked: a slower earlier one mustn't put its courts here)
+    if (game.venue && venueChoices().find((v) => v.id === game.venue)?.real)
+      courtsOf(game.venue)
+        .then((cs) => live && setCourts(cs))
+        .catch(() => live && setCourts([]))
     else setCourts([])
+    return () => {
+      live = false
+    }
   }, [game.venue])
 
   const ctl = (patch) => getEngine()?.twinControl(patch)

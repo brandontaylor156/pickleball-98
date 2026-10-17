@@ -95,7 +95,7 @@ const sub = (a, b) => V(a.x - b.x, a.y - b.y, a.z - b.z)
 const mul = (a, s) => V(a.x * s, a.y * s, a.z * s)
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 const cross = (a, b) => V(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
-const len = (a) => Math.hypot(a.x, a.y, a.z)
+const len = (a) => Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z) // (not Math.hypot: it allocates per call)
 const norm = (a, fallback = V(0, 1, 0)) => {
   const l = len(a)
   return l > 1e-9 ? mul(a, 1 / l) : { ...fallback }

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react"
 import MenuBar from "../../shared/MenuBar"
 import Dialog from "../../shared/Dialog"
 import { helpItem } from "../../../utils/help"
-import { nameKey, usePlayer } from "../../../utils/player"
+import { askForName, nameKey, usePlayer } from "../../../utils/player"
 import * as core from "./clubCore"
 import * as club from "../../../utils/pbclub"
 import Scorekeeper from "./Scorekeeper"
@@ -21,9 +21,24 @@ const LiveCard = ({ onLive, onWatch }) => {
   const [live, setLive] = useState([])
   const online = net?.status === "online"
   useEffect(() => {
-    if (!online || !net?.socket) return
+    if (!online || !net?.socket) return setLive([]) // offline: no stale "is live" rows
     let alive = true
-    const load = () => net.request("bc:list", {}).then((r) => alive && r?.ok && setLive(r.live || []))
+    let loading = false
+    let again = false
+    // (one ask at a time: bc:live / bc:end bursts and the poll don't pile up, a change during
+    // an ask asks once more after it; a failed ask keeps the rows and the next one tries again)
+    const load = () => {
+      if (loading) return void (again = true)
+      loading = true
+      net
+        .request("bc:list", {})
+        .then((r) => alive && r?.ok && setLive(r.live || []))
+        .catch(() => {})
+        .finally(() => {
+          loading = false
+          if (again && alive) (again = false), load()
+        })
+    }
     load()
     const id = setInterval(load, 20000)
     const onNew = () => load()
@@ -162,7 +177,10 @@ const PbClub = ({ mobile, handoff, onClose, embedded = false, onTwin = null, onL
 
   const signedOff = !online && (
     <p className="pbBannerInfo" data-signed-off>
-      Pick a player name to plan sessions and share matches with your group. The scorekeeper works without one (matches wait on this device).
+      Pick a player name to plan sessions and share matches with your group. The scorekeeper works without one (matches wait on this device).{" "}
+      <button type="button" onClick={askForName} data-action="pick-name">
+        Pick a name...
+      </button>
     </p>
   )
 

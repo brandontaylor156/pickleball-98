@@ -14,10 +14,13 @@ export const config = { maxDuration: 60 }
 const UA = "98ish-venue-finder/1.0 (Pickleball 98; https://98ish.vercel.app)"
 const ENDPOINTS = ["https://overpass-api.de/api/interpreter", "https://z.overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
 const TIMEOUT_MS = 25000
+// (all three servers share the function's 60 s: past it Vercel cuts the call off with a page
+// that isn't JSON, and the last server is never asked)
+const BUDGET_MS = 55000
 
-const ask = async (endpoint, query) => {
+const ask = async (endpoint, query, ms = TIMEOUT_MS) => {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), ms)
   try {
     const response = await fetch(endpoint, { method: "POST", signal: controller.signal, headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(query) })
     if (!response.ok) return { status: response.status }
@@ -45,8 +48,11 @@ export default async function handler(req, res) {
 
   const query = venueQuery(Number(lat.toFixed(5)), Number(lon.toFixed(5)), r)
   const seen = []
+  const deadline = Date.now() + BUDGET_MS
   for (const endpoint of ENDPOINTS) {
-    const out = await ask(endpoint, query)
+    const left = deadline - Date.now()
+    if (left < 2000) break
+    const out = await ask(endpoint, query, Math.min(TIMEOUT_MS, left))
     if (out.json) return send(200, { osm_base: out.json.osm3s?.timestamp_osm_base || null, elements: compactElements(out.json.elements) })
     seen.push(out.status)
   }

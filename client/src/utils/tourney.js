@@ -32,7 +32,9 @@ const writeTrophies = (list) => {
 }
 
 const EMPTY = { status: "off", error: null, me: null, events: [], trophies: [], docs: {}, now: 0 }
-let state = { ...EMPTY, trophies: typeof localStorage === "undefined" ? [] : readTrophies() }
+// (readTrophies catches a missing localStorage too: `typeof localStorage` itself throws where
+// storage is blocked, which stopped the whole page loading)
+let state = { ...EMPTY, trophies: readTrophies() }
 const listeners = new Set()
 const set = (patch) => {
   state = { ...state, ...patch }

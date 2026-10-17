@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react"
+import { askForName } from "../../../../utils/player"
 import * as living from "../../../../utils/livingpark"
 import Combo from "../../../shared/select/Combo"
 import { listClones } from "../twin/clone/store.js"
@@ -79,7 +80,12 @@ export const ClonePanel = ({ venueId, venueName, venueNames = {}, look, onClose 
       <div className="pkPanel pkLivingPanel window" data-living="panel">
         <b>My clone in the park</b>
         {!signed ? (
-          <p>Pick a player name to leave your clone in the park.</p>
+          <p>
+            Pick a player name to leave your clone in the park.{" "}
+            <button type="button" onClick={askForName} data-action="pick-name">
+              Pick a name...
+            </button>
+          </p>
         ) : !mine.length ? (
           <p>
             Make a clone of yourself first: film a game, then Twin Replay › the game › Stats › <b>Make a Clone</b>, and check <b>This is me</b>. Only your own clone can be left in the park.

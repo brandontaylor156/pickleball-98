@@ -63,7 +63,8 @@
 // browser runs the simulation and streams snapshots (room:snap, ~20-30 a second, volatile:
 // late ones are dropped, never queued); guests send inputs (room:input) that go only to the
 // host; room:relay carries reliable messages (a point scored); the host ends the game with
-// room:finish { result }. If anyone leaves mid-game the room goes back to its lobby.
+// room:finish { result }. If anyone leaves mid-game the room goes back to its lobby; after the
+// game the result stays up (their seat marked left) and Rematch goes back to the lobby.
 //
 // Socket events (client -> server, all with an ack unless noted; every answer is
 // { ok: true, ... } or { ok: false, error } with a sentence to show):
@@ -688,6 +689,11 @@ const createRooms = ({ games = [], emit = () => {}, emitVolatile = null, blocked
     const mod = room.game
     if (room.phase === "lobby") {
       room.seats[seat] = null
+    } else if (mod.relay && room.phase === "over") {
+      // the game had already ended: the result stays up for whoever's still here (their
+      // Rematch takes them back to the lobby instead, see rematch; votes already in reset)
+      s.left = true
+      room.rematch = new Set()
     } else if (mod.relay) {
       // the host's browser was running the game (or someone's missing): back to the lobby
       stopTimers(room)
@@ -842,6 +848,14 @@ const createRooms = ({ games = [], emit = () => {}, emitVolatile = null, blocked
     if (seat < 0) return { ok: false, error: "You aren't in that game." }
     if (room.phase !== "over") return { ok: false, error: "The game isn't over yet." }
     const gone = room.seats.find((s) => s?.left)
+    // (a real-time game: someone left after it ended, so Rematch means back to the lobby)
+    if (gone && room.game.relay) {
+      backToLobby(room)
+      room.notice = `${gone.name} left.`
+      quickCheck(room)
+      publish(room)
+      return { ok: true, lobby: true }
+    }
     if (gone) return { ok: false, error: `${gone.name} left, so there's no rematch. Start a new game.` }
     room.rematch.add(seat)
     publish(room)
@@ -853,6 +867,11 @@ const createRooms = ({ games = [], emit = () => {}, emitVolatile = null, blocked
   const toLobby = (pid, roomId) => {
     const { room, error } = hostRoom(pid, roomId, "over")
     if (error) return { ok: false, error }
+    backToLobby(room)
+    publish(room)
+    return { ok: true }
+  }
+  const backToLobby = (room) => {
     room.phase = "lobby"
     room.state = null
     room.result = null
@@ -861,8 +880,6 @@ const createRooms = ({ games = [], emit = () => {}, emitVolatile = null, blocked
     for (const s of room.seats) if (!s.bot) s.ready = false
     while (room.seats.length < capacity(room)) room.seats.push(null)
     room.waitingSince = clock.now()
-    publish(room)
-    return { ok: true }
   }
 
   // ---------- real-time (relay) games ----------

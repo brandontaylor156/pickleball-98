@@ -18,10 +18,12 @@ const seasonStart = (v) => {
   if (v === "90" || v === "30") return Date.now() - Number(v) * core.DAY
   return 0
 }
+// the season picked last (the club store keeps its start, so the picker matches it after a remount)
+let lastSeason = "0"
 
 const Ladder = ({ state }) => {
   const [kind, setKind] = useState("doubles")
-  const [season, setSeason] = useState("0")
+  const [season, setSeason] = useState(() => (state.season ? lastSeason : "0"))
   const table = core.ladder(state.ladder?.[kind] || {})
   const stats = useMemo(() => core.statsFor(state.me, state.matches, state.names), [state.matches, state.me, state.names])
   const name = (id) => (id.startsWith("k:") ? state.names[id.slice(2)] || id.slice(2) : id.slice(2))
@@ -29,6 +31,7 @@ const Ladder = ({ state }) => {
   const rivals = Object.entries(stats.opponents).sort((a, b) => b[1].w + b[1].l - (a[1].w + a[1].l))
   const changeSeason = (v) => {
     setSeason(v)
+    lastSeason = v
     club.setSeason(seasonStart(v))
   }
   return (

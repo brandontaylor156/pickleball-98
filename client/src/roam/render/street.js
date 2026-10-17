@@ -162,6 +162,9 @@ const stopTexture = () => {
   return t
 }
 
+// (each signal lens's colour, red / amber / green, and a car's two lamps: made once, not every frame)
+const LENS_RGB = [[1, 0.12, 0.08], [1, 0.62, 0.1], [0.25, 1, 0.55]]
+const SIDES = [-1, 1]
 export const createStreetLayer = (scene, { cap = 400 } = {}) => {
   const own = []
   const metal = new THREE.MeshLambertMaterial({ color: 0x6d7073 })
@@ -284,14 +287,13 @@ export const createStreetLayer = (scene, { cap = 400 } = {}) => {
     // every frame: the signals' colours (the cycle), the lamps' and cars' glows at night
     // cars: [{ x, y, z, yaw, len, wid, brake }] (moving cars: yours, traffic, friends')
     update(time, night, camera, cars = [], beam = null) {
-      const c = new THREE.Color()
       for (const L of lensList) {
         const p = L.piece
         const green = signalGreen(time, p.yaw, Math.round(p.x * 0.01 + p.z * 0.013) * 7)
         // (amber: the last 3 s before the light turns red)
         const amber = !green && signalGreen(time - 3, p.yaw, Math.round(p.x * 0.01 + p.z * 0.013) * 7)
         const on = L.color === 2 ? green : L.color === 1 ? amber : !green && !amber
-        const base = L.color === 0 ? [1, 0.12, 0.08] : L.color === 1 ? [1, 0.62, 0.1] : [0.25, 1, 0.55]
+        const base = LENS_RGB[L.color] || LENS_RGB[2]
         const k = on ? 1 : 0.12
         lenses.instanceColor.setXYZ(L.i, base[0] * k, base[1] * k, base[2] * k)
       }
@@ -314,7 +316,7 @@ export const createStreetLayer = (scene, { cap = 400 } = {}) => {
           const fz = Math.cos(car.yaw)
           const rx = -fz
           const rz = fx
-          for (const sd of [-1, 1]) {
+          for (const sd of SIDES) {
             m4.compose(v.set(car.x + fx * car.len * 0.5 + rx * sd * car.wid * 0.33, car.y + 0.72, car.z + fz * car.len * 0.5 + rz * sd * car.wid * 0.33), camQ, s.setScalar(1.3))
             glows.setMatrixAt(ng++, m4)
           }

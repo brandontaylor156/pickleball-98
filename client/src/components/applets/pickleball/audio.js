@@ -29,7 +29,10 @@ export const createAudio = () => {
 
   // on the page's shared AudioContext; this game's own gain (so closing it can cut its
   // crowd) into the taskbar volume
-  const ready = () => {
+  // (`loop`: the murmur may start while the context still sleeps; a one-shot sound may not:
+  // a suspended context's clock stands still, so every sound started before the first tap, or
+  // while the page was in the background, would play at once when it wakes)
+  const ready = (loop = false) => {
     if (!enabled || !getSettings().systemSounds || masterGain() <= 0) return null
     if (!ctx) {
       ctx = getAudioContext()
@@ -41,7 +44,10 @@ export const createAudio = () => {
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1
       makeRoom()
     }
-    if (ctx.state !== "running") ctx.resume().catch(() => {})
+    if (ctx.state !== "running") {
+      ctx.resume().catch(() => {})
+      return loop ? ctx : null
+    }
     return ctx
   }
 
@@ -189,7 +195,7 @@ export const createAudio = () => {
 
   const api = {
     unlock() {
-      ready()
+      ready(true)
     },
     setEnabled(on) {
       enabled = on
@@ -282,7 +288,7 @@ export const createAudio = () => {
     // the crowd: size 0..1 sets the murmur; cheer(level) after a point; ooh() for a near thing
     setCrowd(size) {
       crowdLevel = size
-      const c = size > 0 ? ready() : ctx
+      const c = size > 0 ? ready(true) : ctx
       if (!c) return
       if (size > 0 && !murmur) {
         const src = c.createBufferSource()

@@ -1395,12 +1395,39 @@ const paddleTexture = (a, b, design = "stripe") => {
   t.anisotropy = 4
   return t
 }
+// (shared by everyone holding the same paddle, counted: My Park's people carry paddles of every
+// color, so past PADDLE_KEEP kinds one nobody holds any more is let go, GPU copy and all, instead
+// of the cache growing by a few paddles every visit)
+const PADDLE_KEEP = 24
+const releasePaddle = (key) => {
+  const out = assets?.paddles.get(key)
+  if (!out) return
+  out.users = Math.max(0, (out.users || 0) - 1)
+  if (out.users > 0 || assets.paddles.size <= PADDLE_KEEP) return
+  for (const [k, v] of assets.paddles) {
+    if (assets.paddles.size <= PADDLE_KEEP) break
+    if (v.users > 0) continue
+    // (its geometry and print go; the material is left to the garbage collector: every paddle
+    // shares one shader program ("pk-paddle"), and disposing a material while a background
+    // compile (engine.js warm) waits on that program left the warm-up holding the picture)
+    v.geo.dispose()
+    v.mat.map?.dispose()
+    assets.paddles.delete(k)
+  }
+}
 const paddleFor = (look) => {
   const a = look.paddle || "#ffd23f"
   const b = look.paddleEdge || "#15223a"
   const design = look.paddleDesign || "stripe"
   const key = a + b + design
-  if (assets.paddles.has(key)) return assets.paddles.get(key)
+  if (assets.paddles.has(key)) {
+    const hit = assets.paddles.get(key)
+    // (most recently used last: the oldest unheld ones go first)
+    assets.paddles.delete(key)
+    assets.paddles.set(key, hit)
+    hit.users = (hit.users || 0) + 1
+    return hit
+  }
   const P = paddleParts()
   const strip = 4 / (PRINT + 8) // v of the white strip's middle
   const piece = (geo, hex, face = false) => {
@@ -1423,7 +1450,7 @@ const paddleFor = (look) => {
   }
   const geo = mergeGeometries([piece(P.face, "#ffffff", true), piece(P.guard, b), piece(P.throat, b), piece(P.handle, "#1d1d22"), piece(P.cap, b)])
   const mat = paddleMaterial(paddleTexture(a, b, design), strip * 2)
-  const out = { geo, mat }
+  const out = { geo, mat, key, users: 1 }
   assets.paddles.set(key, out)
   return out
 }
@@ -1454,9 +1481,10 @@ const paddleMaterial = (map, faceFromV) => {
   return gearEnv(m, 0.45)
 }
 const buildPaddle = (look, shadows) => {
-  const { geo, mat } = paddleFor(look)
+  const { geo, mat, key } = paddleFor(look)
   const mesh = new THREE.Mesh(geo, mat)
   mesh.castShadow = shadows
+  mesh.userData.paddleKey = key
   return mesh
 }
 // the paddle's own frame: grip point at the origin, handle along +y, face normal +z; the
@@ -1574,6 +1602,17 @@ const accessories = (look, head) => {
 
 // ---- sneakers: a lofted shoe round the foot (rest pose, world space), colored per vertex:
 // sole, upper, an accent stripe and heel tab, laces ----
+// Shadows: three draws every caster into the shadow map with one shared depth material, so
+// going from the court's still meshes to a skinned body to a morphing face switched its program
+// several times a frame (each switch works out the program's parameters again: CPU and garbage
+// on a phone). Skinned bodies get their own, one per kind (morph count), shared by everyone.
+const skinDepths = new Map()
+const skinDepth = (mesh) => {
+  const m = mesh.geometry.morphAttributes || {}
+  const key = `${m.position?.length || 0}|${m.color ? 1 : 0}`
+  if (!skinDepths.has(key)) skinDepths.set(key, new THREE.MeshDepthMaterial())
+  return skinDepths.get(key)
+}
 const sneakerCache = new Map()
 const sneakerGeometry = (tpl, side, look) => {
   const shoes = look.shoes || "#ffffff"
@@ -1774,6 +1813,7 @@ const hairSwayWeights = (tpl, src, geo) => {
 
 // ---- an athlete ----
 const DRIVEN_SPINE = ["spine_01", "spine_02", "spine_03"]
+const LAYER_LIST = Object.entries(LAYERS) // (layerMoves runs per bone per frame: listed once)
 const buildAthlete = (look = {}, { shadows = false, withPaddle = true, live = {} } = {}, detail = "medium") => {
   const kind = bodyOf(look)
   const tpl = (isHi(detail) && assets.hi?.[kind]) || assets[kind]
@@ -2052,7 +2092,7 @@ const buildAthlete = (look = {}, { shadows = false, withPaddle = true, live = {}
   const mask = { clavicle_l: 1, clavicle_r: 1 }
   const layerMoves = (bone) => {
     let d = Q()
-    for (const [name, L] of Object.entries(LAYERS)) {
+    for (const [name, L] of LAYER_LIST) {
       const w = (layers[name] || 0) * L.gain * (L.bones[bone] || 0) * (L.locked ? (mask[bone] ?? 1) : 1)
       if (w <= 1e-3) continue
       const clip = moves.clips[L.clip]
@@ -2547,13 +2587,18 @@ const buildAthlete = (look = {}, { shadows = false, withPaddle = true, live = {}
   const tmpB = new THREE.Vector3()
   const tmpM = new THREE.Matrix4()
   const tmpM3 = new THREE.Matrix3()
+  // (scratch for updateSway: it ran every frame per athlete and made five vectors a spring)
+  const swA = new THREE.Vector3()
+  const swV = new THREE.Vector3()
+  const swAcc = new THREE.Vector3()
+  const swF = new THREE.Vector3()
   if (skirtSway) addSpring(skirtSway, () => B.pelvis.localToWorld(tmpA.set(0, -0.18 / s, 0)), outfit, { hz: 2.6, damp: 0.45, max: 0.06, flare: () => B.pelvis.getWorldPosition(tmpA), gain: 0.55 })
   if (hairSway && hairMeshW) addSpring(hairSway, () => head.localToWorld(tmpA.set(0, -0.02 / s, -0.1 / s)), hairMeshW, { hz: 1.7, damp: 0.3, max: 0.1, gain: 0.8 })
   const updateSway = (dt) => {
     if (!springs.length || dt <= 0 || (typeof window !== "undefined" && window.__pbNoSway)) return
     const h = Math.min(dt, 1 / 30)
     for (const sp of springs) {
-      const a = sp.anchor().clone()
+      const a = swA.copy(sp.anchor())
       if (!sp.p || dt > 0.2 || a.distanceTo(sp.p) > 1) {
         // (a new start, or a teleport between points: no swing)
         sp.p = a.clone()
@@ -2561,13 +2606,13 @@ const buildAthlete = (look = {}, { shadows = false, withPaddle = true, live = {}
         sp.x.set(0, 0, 0)
         sp.xv.set(0, 0, 0)
       }
-      const v = a.clone().sub(sp.p).divideScalar(dt)
-      const acc = v.clone().sub(sp.v).divideScalar(dt).clampLength(0, 60)
+      const v = swV.copy(a).sub(sp.p).divideScalar(dt)
+      const acc = swAcc.copy(v).sub(sp.v).divideScalar(dt).clampLength(0, 60)
       sp.p.copy(a)
       sp.v.copy(v)
       // x'' = -w^2 x - 2 zeta w x' - acc (the tips lag behind what the anchor does)
       const w = 2 * Math.PI * sp.hz
-      const f = sp.x.clone().multiplyScalar(-w * w).addScaledVector(sp.xv, -2 * sp.damp * w).addScaledVector(acc, -sp.gain)
+      const f = swF.copy(sp.x).multiplyScalar(-w * w).addScaledVector(sp.xv, -2 * sp.damp * w).addScaledVector(acc, -sp.gain)
       sp.xv.addScaledVector(f, h)
       sp.x.addScaledVector(sp.xv, h)
       sp.x.y = Math.min(sp.x.y, 0.02) // (never up through the head or the waist)
@@ -2598,6 +2643,9 @@ const buildAthlete = (look = {}, { shadows = false, withPaddle = true, live = {}
   const dispose = () => {
     outfit.geometry.dispose()
     skeleton.dispose()
+    // (once: a second dispose mustn't let go of someone else's hold)
+    if (paddle?.userData.paddleKey) releasePaddle(paddle.userData.paddleKey)
+    if (paddle) paddle.userData.paddleKey = null
   }
 
   // (tests) where the paddle face's center and the soles are
@@ -2687,6 +2735,7 @@ const buildAthlete = (look = {}, { shadows = false, withPaddle = true, live = {}
     body.material.dispose()
     if (hairMeshW) hairMeshW.material.dispose()
   }
+  root.traverse((o) => o.isSkinnedMesh && (o.customDepthMaterial = skinDepth(o)))
   return { group: root, apply, setShadows, dispose: () => (dispose(), disposeOwn()), probe, probeUpper, probeLife, probeArms, probePaddleBody, debug: { paddle: paddleHolder, bones: B, arm: () => armState[paddleSide].last }, blobs: [], vertices, skinned: true, live, detail: tpl === assets.hi?.[kind] ? "high" : "medium", face: face?.id || null, cards: !!ownCards }
 }
 
@@ -2729,6 +2778,7 @@ export const createAthlete = (look = {}, opts = {}) => {
     },
     dispose: () => {
       disposed = true
+      hiWaiters.delete(onHi) // (or a disposed athlete's whole body stays held until High arrives)
       inner.dispose()
     },
     probe: () => inner.probe(),
@@ -2755,6 +2805,10 @@ export const createAthlete = (look = {}, opts = {}) => {
     skinned: true,
     live: opts.live,
   }
+  const onHi = () => {
+    if (!assets.hi) return
+    upgrade()
+  }
   // built again (posed as it was) when something better arrives: the High body, a photo face
   const upgrade = () => {
     if (disposed) return
@@ -2767,10 +2821,7 @@ export const createAthlete = (look = {}, opts = {}) => {
     if (lastPose) inner.apply(lastPose, 1 / 60)
   }
   if (isHi(detail) && inner.detail !== "high") {
-    hiWaiters.add(() => {
-      if (!assets.hi) return
-      upgrade()
-    })
+    hiWaiters.add(onHi)
     loadHi()
   }
   if (!faceDone()) faceReady(look, isHi(detail) ? "hi" : "med").then((ok) => ok && upgrade())

@@ -142,3 +142,37 @@ test("ticks are rate limited and the bandwidth stays small", () => {
   const mb = (s.bytesIn - before.bytesIn + s.bytesOut - before.bytesOut) / 1024 / 1024
   assert.ok(mb < 3, `${mb.toFixed(2)} MB of payload an hour with one viewer`)
 })
+
+test("the phone's connection dropped and the server ended it: its next tick after reconnecting gets bc:end", () => {
+  const { bc, sent, me } = setup()
+  const host = me("p1", "brandon", "Brandon")
+  const r = bc.start(host, { title: "Game", players: [{ name: "A" }, { name: "B", team: 1 }] })
+  bc.drop("p1") // gone past the grace: ended
+  assert.equal(bc.broadcasts.size, 0)
+  sent.length = 0
+  // back on a new computer id (same player): the phone still thinks it's live
+  bc.tick("p9", tick(100), "brandon")
+  assert.deepEqual(sent, [["p9", "bc:end", { id: r.id, reason: "left" }]])
+  // told once
+  bc.tick("p9", tick(200), "brandon")
+  assert.equal(sent.length, 1)
+  // a stranger's ticks get nothing
+  bc.tick("p5", tick(100), "sam")
+  assert.equal(sent.length, 1)
+  // going live again clears any old note
+  bc.start(host, { title: "Again" })
+  bc.drop("p1")
+  bc.start(me("p2", "brandon", "Brandon"), { title: "Third" })
+  sent.length = 0
+  bc.tick("p2", tick(300), "brandon")
+  assert.ok(!sent.some((x) => x[1] === "bc:end"), "live again: no stale end")
+})
+
+test("a broadcast the host stopped itself leaves no note for later ticks", () => {
+  const { bc, sent, me } = setup()
+  bc.start(me("p1", "brandon", "Brandon"), { title: "Game" })
+  bc.stop(me("p1", "brandon", "Brandon"))
+  sent.length = 0
+  bc.tick("p1", tick(100), "brandon")
+  assert.equal(sent.length, 0)
+})

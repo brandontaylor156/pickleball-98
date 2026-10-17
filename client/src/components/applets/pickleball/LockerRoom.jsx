@@ -326,7 +326,7 @@ export const LockerRoom = ({ prefs, setPrefs, engine, onBack, initial }) => {
             </label>
           </fieldset>
           <p className="pkLockerHint">Drag the player to turn them around.</p>
-          <div className="pkRow">
+          <div className="pkRow pkLockerActions">
             <button type="button" className="pkPrimary" onClick={save} data-action="save">
               Save
             </button>

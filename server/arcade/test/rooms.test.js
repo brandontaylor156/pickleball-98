@@ -426,6 +426,37 @@ test("relay rooms: the host streams snapshots, guests send inputs, the host ends
   assert.equal(view.seats.length, 4)
 })
 
+test("relay rooms: someone leaving after the game keeps the result up; Rematch then goes back to the lobby", () => {
+  const pong = { id: "pong", name: "Pong", minPlayers: 2, maxPlayers: 2, relay: true }
+  const env = setup({ games: [pong] })
+  const { rooms, last } = env
+  const made = rooms.create(me("a"), "pong")
+  rooms.join(me("b"), { code: made.code })
+  rooms.ready("b", made.roomId, true)
+  assert.ok(rooms.start("a", made.roomId).ok)
+  assert.ok(rooms.finishRelay("a", made.roomId, { winners: [1], reason: "11 points" }).ok)
+  rooms.rematch("b", made.roomId) // a vote in, then the host closes the window
+  rooms.leave("a", made.roomId)
+  let view = last("b")
+  assert.equal(view.phase, "over", "the winner still sees the result")
+  assert.deepEqual(view.result.winnerNames, ["Bob"])
+  assert.equal(view.seats[0].left, true)
+  assert.equal(view.host, true)
+  assert.deepEqual(view.rematch, [], "votes reset so Rematch can be pressed again")
+  const again = rooms.rematch("b", made.roomId)
+  assert.ok(again.ok)
+  assert.equal(again.lobby, true)
+  view = last("b")
+  assert.equal(view.phase, "lobby")
+  assert.equal(view.notice, "Alice left.")
+  assert.equal(view.seats.length, 2)
+  assert.equal(view.seats[0].name, "Bob")
+  assert.equal(view.seats[1], null)
+  // the last one out closes the room
+  rooms.leave("b", made.roomId)
+  assert.equal(rooms.join(me("c"), { code: made.code }).ok, false)
+})
+
 // ---------- over real sockets, through Network Neighborhood ----------
 
 let ioClient = null

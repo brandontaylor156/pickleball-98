@@ -54,15 +54,25 @@ export const createPeds = ({ cap = 3, seed = 7 } = {}) => {
   const rand = rng(seed)
   const peds = []
   let nextId = 1
+  // (the lines as a set and the shoppy ones, kept while world.lines is the same list)
+  let linesOf = null
+  let linesLen = -1
+  let lineSet = new Set()
+  let shoppy = []
   return {
     peds,
     cap,
     step(world, center, dt) {
+      if (world.lines !== linesOf || world.lines.length !== linesLen) {
+        linesOf = world.lines
+        linesLen = world.lines.length
+        lineSet = new Set(world.lines)
+        shoppy = world.lines.filter((l) => l.shop)
+      }
       for (let i = peds.length - 1; i >= 0; i--) {
         const p = peds[i]
-        if (Math.hypot(p.x - center.x, p.z - center.z) > 180 || !world.lines.includes(p.line)) peds.splice(i, 1)
+        if (Math.hypot(p.x - center.x, p.z - center.z) > 180 || !lineSet.has(p.line)) peds.splice(i, 1)
       }
-      const shoppy = world.lines.filter((l) => l.shop)
       while (peds.length > this.cap) peds.pop()
       // (just arrived, world.view.fresh: people come into the view you see first, 12-70 m ahead,
       // so the street isn't empty; later they appear out of sight where they can)

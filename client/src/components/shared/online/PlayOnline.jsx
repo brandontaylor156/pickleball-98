@@ -404,17 +404,20 @@ export const OnlineResultBar = ({ online, text }) => {
   const headline = text || (r.draw && !r.winners?.length ? "It's a draw." : youWon ? (r.winners.length > 1 ? "Your side wins!" : "You win!") : `${(r.winnerNames || []).join(" and ")} ${r.winners?.length > 1 ? "win" : "wins"}.`)
   const voted = room.you !== null && room.rematch.includes(room.you)
   const wanting = room.rematch.filter((s) => s !== room.you).map((s) => room.seats[s]?.name).filter(Boolean)
+  // (a real-time game: someone left after it ended; Play Again takes you back to the lobby)
+  const gone = room.mode === "relay" ? room.seats.filter((s) => s?.left).map((s) => s.name) : []
   return (
     <div className="olResult" role="status">
       <b>{headline}</b>
+      {gone.length > 0 && <small>{gone.join(" and ")} left.</small>}
       {wanting.length > 0 && !voted && <small>{wanting.join(", ")} {wanting.length > 1 ? "want" : "wants"} a rematch</small>}
       <span className="olRow">
         {!room.spectator && (
           <button type="button" className={voted ? "" : "olPrimary"} disabled={voted || busy === "rematch"} onClick={online.rematch}>
-            {voted ? "Waiting for the others..." : wanting.length ? "Accept Rematch" : "Rematch"}
+            {gone.length ? "Play Again" : voted ? "Waiting for the others..." : wanting.length ? "Accept Rematch" : "Rematch"}
           </button>
         )}
-        {room.host && room.private && (
+        {room.host && room.private && !gone.length && (
           <button type="button" onClick={online.backToLobby}>
             Back to Lobby
           </button>

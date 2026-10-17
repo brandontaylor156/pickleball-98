@@ -5,10 +5,11 @@ import PbClubBridge from "./components/applets/pbclub/PbClubBridge"
 import Help from "./components/help/Help"
 import Notices from "./components/Notices"
 import PlayerGate from "./components/PlayerGate"
+import ErrorBoundary from "./components/shared/ErrorBoundary"
 import { useA11yRoot } from "./hooks/useA11y"
 import { useIsMobile } from "./hooks/useMediaQuery"
 import { openHelp } from "./utils/help"
-import { SERVER, getPlayer, refreshMe, subscribePlayer, usePlayer } from "./utils/player"
+import { SERVER, getPlayer, onAskForName, refreshMe, subscribePlayer, usePlayer } from "./utils/player"
 import { useSettings } from "./utils/settings"
 import { setClubSession } from "./utils/pbclub"
 import { setTourneySession } from "./utils/tourney"
@@ -56,6 +57,8 @@ export default function App() {
   // a link from 98ish (?mode=&venue=): start there (utils/deepLink.js)
   const [handoff, setHandoff] = useState(takeLinkHandoff)
 
+  // a screen asking for a name (askForName: the Tournaments tab, say) opens the name box
+  useEffect(() => onAskForName(() => setGate(true)), [])
   // a saved name: check it's still there on the server (it may have been removed)
   useEffect(() => {
     refreshMe().catch(() => {})
@@ -85,7 +88,9 @@ export default function App() {
               .title-bar-controls stay as hooks: GameChat docks into them; app.css draws neither) */}
           <div className="window pkAppWin">
             <Suspense fallback={<div className="pkAppLoading">Loading Pickleball 98...</div>}>
-              <Pickleball mobile={mobile} handoff={handoff} onClose={EMBEDDED ? exitToHost : undefined} />
+              <ErrorBoundary>
+                <Pickleball mobile={mobile} handoff={handoff} onClose={EMBEDDED ? exitToHost : undefined} />
+              </ErrorBoundary>
             </Suspense>
             <div className="title-bar pkAppTop">
               <div className="title-bar-controls pkAppControls">

@@ -60,6 +60,8 @@ export default function TwinReplay({ getEngine, onExit, onPlayClones = null, ini
   useEffect(() => {
     refresh()
   }, [refresh])
+  // (leaving Twin Replay while a video is being read stops the reading)
+  useEffect(() => () => void (control.current.cancelled = true), [])
   // (the match behind stays on its title while we're not replaying)
   useEffect(() => {
     if (view !== "game") getEngine()?.stopTwin()
@@ -89,6 +91,7 @@ export default function TwinReplay({ getEngine, onExit, onPlayClones = null, ini
     const v = await getVideo(id).catch(() => null)
     setGame(g)
     setBlob(v || null)
+    setError(!g.analysis && !v ? "This game's video isn't on this device any more, so it can't be read." : null)
     if (!g.analysis) setView(v ? "calibrate" : "home")
     else setView("game")
   }
@@ -216,8 +219,8 @@ export default function TwinReplay({ getEngine, onExit, onPlayClones = null, ini
                 Open a video
               </button>
             </div>
-            <input ref={fileRef} type="file" accept="video/*" hidden onChange={(e) => e.target.files?.[0] && startNew(e.target.files[0], e.target.files[0].name.replace(/\.[^.]+$/, "").slice(0, 60))} />
-            <input ref={twinRef} type="file" accept=".twin,.json,application/json,application/octet-stream" hidden onChange={(e) => e.target.files?.[0] && openTwin(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept="video/*" hidden onChange={(e) => (e.target.files?.[0] && startNew(e.target.files[0], e.target.files[0].name.replace(/\.[^.]+$/, "").slice(0, 60)), (e.target.value = ""))} />
+            <input ref={twinRef} type="file" accept=".twin,.json,application/json,application/octet-stream" hidden onChange={(e) => (e.target.files?.[0] && openTwin(e.target.files[0]), (e.target.value = ""))} />
             {error && <p className="pkTwinError">{error}</p>}
             <MoreOptions id="pickleball.twinHome">
               <div className="pkTwinButtons">

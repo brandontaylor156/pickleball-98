@@ -2,17 +2,23 @@
 // files (/roam/<town>/16/x/y.json, cached by the CDN and the service worker); anything outside
 // them comes from the tile function (/api/town?z&x&y, built live from OpenStreetMap and cached
 // by Vercel's CDN for 30 days). Two at a time from the static files, one at a time from the
-// function, nearest first, with a growing pause after a failure. Pure apart from fetch;
+// function, nearest first, with a growing pause after a failure (a request that hangs is given
+// up after a while, so it doesn't hold its slot and stall the loading). Pure apart from fetch;
 // Node-tested with a fake fetch (roam.test.js).
 
 import { decodeTile } from "./data/tile.js"
 import { tileKey } from "./geo.js"
 
-export const createTileStore = ({ town, frame, fetchFn = (...a) => globalThis.fetch(...a), apiBase = "", keep = 60 } = {}) => {
+// (how long a tile may take before it's given up and asked for again after the usual pause; the
+// live function builds a tile from OpenStreetMap, so it gets longer)
+const TILE_TIMEOUT = { static: 15000, api: 30000 }
+
+export const createTileStore = ({ town, frame, fetchFn = (...a) => globalThis.fetch(...a), apiBase = "", keep = 60, timeout = TILE_TIMEOUT } = {}) => {
   let index = null
   let base = town.base ?? 0
   let indexP = null
   let indexDone = !town.prebuilt
+  let indexRetry = 0 // (the index didn't come: when to ask again)
   const decoded = new Map() // key -> decoded tile (most recently used last)
   const pending = new Map() // key -> promise
   const failed = new Map() // key -> { until, n }
@@ -21,14 +27,37 @@ export const createTileStore = ({ town, frame, fetchFn = (...a) => globalThis.fe
 
   const loadIndex = () => {
     if (indexP) return indexP
-    indexP = (town.prebuilt ? fetchFn(`${town.prebuilt}/index.json`).then((r) => (r.ok ? r.json() : null)) : Promise.resolve(null))
+    // (a failed index (offline a moment, a 5xx) is asked for again a few seconds later: without
+    // it a prebuilt town fetches no tiles at all, and the page sat on "Loading the town..." for good)
+    // (and one that hangs is given up like a tile, then asked for again)
+    let timer = null
+    const ctl = town.prebuilt && typeof AbortController === "function" ? new AbortController() : null
+    indexP = (town.prebuilt
+      ? Promise.race([
+          fetchFn(`${town.prebuilt}/index.json`, ctl ? { signal: ctl.signal } : undefined).then((r) => {
+            if (!r.ok) throw new Error(`index: ${r.status}`)
+            return r.json()
+          }),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => {
+              ctl?.abort()
+              reject(new Error("index: timed out"))
+            }, timeout.static)
+          }),
+        ]).finally(() => clearTimeout(timer))
+      : Promise.resolve(null))
       .then((ix) => {
         index = ix
         if (ix && Number.isFinite(ix.base)) base = ix.base
+        indexDone = true
         return ix
       })
-      .catch(() => (index = null))
-      .finally(() => (indexDone = true))
+      .catch(() => {
+        index = null
+        indexP = null
+        indexRetry = Date.now() + 3000
+        return null
+      })
     return indexP
   }
   const prebuilt = (t) => !!index && t.z === index.z && t.x >= index.x0 && t.x <= index.x1 && t.y >= index.y0 && t.y <= index.y1
@@ -43,10 +72,22 @@ export const createTileStore = ({ town, frame, fetchFn = (...a) => globalThis.fe
     const key = tileKey(t)
     const kind = prebuilt(t) ? "static" : "api"
     inflight[kind]++
+    const ctl = typeof AbortController === "function" ? new AbortController() : null
+    let timer = null
     try {
-      const res = await fetchFn(urlOf(t))
-      if (!res.ok) throw new Error(`tile ${key}: ${res.status}`)
-      const raw = await res.json()
+      const get = async () => {
+        const res = await fetchFn(urlOf(t), ctl ? { signal: ctl.signal } : undefined)
+        if (!res.ok) throw new Error(`tile ${key}: ${res.status}`)
+        return res.json()
+      }
+      // (a hung request: aborted, and failed like any other, so its slot is free again)
+      const late = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          ctl?.abort()
+          reject(new Error(`tile ${key}: timed out`))
+        }, timeout[kind])
+      })
+      const raw = await Promise.race([get(), late])
       const tile = decodeTile(raw, frame, base)
       decoded.set(key, tile)
       failed.delete(key)
@@ -60,6 +101,7 @@ export const createTileStore = ({ town, frame, fetchFn = (...a) => globalThis.fe
       failed.set(key, f)
       return null
     } finally {
+      clearTimeout(timer)
       inflight[kind]--
       pending.delete(key)
     }
@@ -67,7 +109,7 @@ export const createTileStore = ({ town, frame, fetchFn = (...a) => globalThis.fe
 
   // ask for tiles (nearest first); starts what the limits allow -> the ones already here
   const want = (list) => {
-    if (!indexDone) loadIndex()
+    if (!indexDone && Date.now() >= indexRetry) loadIndex()
     const have = []
     for (const t of list) {
       const key = tileKey(t)

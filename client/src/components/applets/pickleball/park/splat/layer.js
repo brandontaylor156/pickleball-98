@@ -16,11 +16,13 @@ export const createSplatLayer = ({ scene, renderer, quality = "medium", phone = 
   let mesh = null
   let sparkRenderer = null
   let token = 0
+  let dead = false
   const info = { shown: false, splats: 0, error: null, budget }
 
   const ensure = async () => {
     if (!spark) spark = await import("@sparkjsdev/spark")
-    if (!sparkRenderer && renderer) {
+    // (the park went while Spark loaded: nothing added to its scene)
+    if (!sparkRenderer && renderer && !dead) {
       // (maxPixelRadius: a splat right in front of the camera never grows into a screen-filling blur)
       sparkRenderer = new spark.SparkRenderer({ renderer, lodSplatCount: budget, enableLod: true, maxPixelRadius: phone ? 48 : 96 })
       sparkRenderer.name = "splatRenderer"
@@ -110,6 +112,7 @@ export const createSplatLayer = ({ scene, renderer, quality = "medium", phone = 
       info.splats = 0
     },
     dispose() {
+      dead = true
       this.hide()
       if (sparkRenderer) {
         scene.remove(sparkRenderer)

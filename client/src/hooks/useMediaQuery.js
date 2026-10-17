@@ -1,13 +1,17 @@
-import { useSyncExternalStore } from "react"
+import { useCallback, useSyncExternalStore } from "react"
 import { openOnDoubleClick } from "../utils/mouseOptions"
 
 export const useMediaQuery = (query) =>
   useSyncExternalStore(
-    (onChange) => {
-      const list = window.matchMedia(query)
-      list.addEventListener("change", onChange)
-      return () => list.removeEventListener("change", onChange)
-    },
+    // (one subscribe per query: a new function each render makes React resubscribe every render)
+    useCallback(
+      (onChange) => {
+        const list = window.matchMedia(query)
+        list.addEventListener("change", onChange)
+        return () => list.removeEventListener("change", onChange)
+      },
+      [query]
+    ),
     () => window.matchMedia(query).matches
   )
 

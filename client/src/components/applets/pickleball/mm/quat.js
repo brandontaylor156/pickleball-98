@@ -8,7 +8,8 @@ export const vadd = (a, b) => V(a.x + b.x, a.y + b.y, a.z + b.z)
 export const vmul = (a, s) => V(a.x * s, a.y * s, a.z * s)
 export const vdot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 export const vcross = (a, b) => V(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
-export const vlen = (a) => Math.hypot(a.x, a.y, a.z)
+// (sqrt of squares, not Math.hypot: hypot allocates per call, and these run thousands of times a frame)
+export const vlen = (a) => Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
 export const vnorm = (a, fallback = V(0, 1, 0)) => {
   const l = vlen(a)
   return l > 1e-9 ? vmul(a, 1 / l) : { ...fallback }
@@ -19,7 +20,7 @@ export const Q = (x = 0, y = 0, z = 0, w = 1) => ({ x, y, z, w })
 export const qmul = (a, b) => Q(a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x, a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z)
 export const qinv = (q) => Q(-q.x, -q.y, -q.z, q.w)
 export const qnorm = (q) => {
-  const l = Math.hypot(q.x, q.y, q.z, q.w) || 1
+  const l = Math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w) || 1
   return Q(q.x / l, q.y / l, q.z / l, q.w / l)
 }
 export const qrot = (q, v) => {
@@ -44,7 +45,7 @@ export const qslerp = (a, b, t) => {
 }
 export const qangle = (a, b) => 2 * Math.acos(clamp(Math.abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w), 0, 1))
 export const qbasis = (x, y, z) => {
-  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = [x.x, y.x, z.x, x.y, y.y, z.y, x.z, y.z, z.z]
+  const m00 = x.x, m01 = y.x, m02 = z.x, m10 = x.y, m11 = y.y, m12 = z.y, m20 = x.z, m21 = y.z, m22 = z.z
   const tr = m00 + m11 + m22
   let q
   if (tr > 0) {

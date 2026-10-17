@@ -690,6 +690,18 @@
   flex-shrink: 0;
 }
 
+/* (Save, Surprise me, Reset, Close stay at the bottom of the panel while the rest scrolls:
+   on a phone they were a long scroll down) */
+.pkLockerActions {
+  position: sticky;
+  bottom: -8px;
+  margin: 0 -8px -8px;
+  padding: 6px 8px 8px;
+  background: #c0c0c0;
+  border-top: 1px solid #808080;
+  z-index: 3; /* (over the tab sheet, .pkLockerSheet: 2) */
+}
+
 .pkLockerTop {
   display: flex;
   flex-wrap: wrap;
@@ -1555,6 +1567,11 @@
 
 .pkPause {
   max-width: 220px;
+  /* (a phone on its side with big tap targets or big text: the menu scrolls instead of
+     running off the top and bottom, where Resume and Quit were cut off) */
+  max-height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .pkPauseMenu {
@@ -1639,6 +1656,14 @@
   z-index: 7;
   overflow-y: auto;
   background: #c0c0c0;
+  /* (a column: the Play tabs, then the online screen in the rest. The screen's height: 100%
+     under the tabs pushed its Back button below the bottom of a phone) */
+  display: flex;
+  flex-direction: column;
+}
+
+.pkOnlineTabs {
+  flex: none;
 }
 
 .pkOnlineSettings {

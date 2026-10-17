@@ -22,11 +22,13 @@ const ENDPOINTS = ["https://overpass-api.de/api/interpreter", "https://z.overpas
 const TIMEOUT_MS = 25000
 const PAD = 0.0004 // degrees round the tile (~40 m): roads and areas crossing the edge
 
-const timed = async (url, init) => {
+// (read: the body too, inside the timeout: a server that sends its headers and then stalls
+// would otherwise hold the function to its 60 s limit)
+const timed = async (url, init, read) => {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
-    return await fetch(url, { ...init, signal: controller.signal })
+    return await read(await fetch(url, { ...init, signal: controller.signal }))
   } finally {
     clearTimeout(timer)
   }
@@ -36,12 +38,11 @@ const overpass = async (query) => {
   const seen = []
   for (const endpoint of ENDPOINTS) {
     try {
-      const response = await timed(endpoint, { method: "POST", headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(query) })
-      if (!response.ok) {
-        seen.push(response.status)
+      const { ok, status, json } = await timed(endpoint, { method: "POST", headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(query) }, async (r) => ({ ok: r.ok, status: r.status, json: r.ok ? await r.json() : null }))
+      if (!ok) {
+        seen.push(status)
         continue
       }
-      const json = await response.json()
       if (Array.isArray(json?.elements)) return json.elements.map(compactElement).filter(Boolean)
       seen.push(502)
     } catch (error) {
@@ -58,9 +59,8 @@ const terrain = async (box) => {
   await Promise.all(
     list.map(async (t) => {
       try {
-        const response = await timed(TERRAIN_URL(t.z, t.x, t.y), { headers: { "User-Agent": UA } })
-        if (!response.ok) return
-        const bytes = new Uint8Array(await response.arrayBuffer())
+        const bytes = await timed(TERRAIN_URL(t.z, t.x, t.y), { headers: { "User-Agent": UA } }, async (r) => (r.ok ? new Uint8Array(await r.arrayBuffer()) : null))
+        if (!bytes) return
         pngs.set(`${t.z}/${t.x}/${t.y}`, decodePng(bytes, (b) => new Uint8Array(zlib.inflateSync(b))))
       } catch {
         // (no terrain for that piece: the sampler falls back to its neighbours or flat)

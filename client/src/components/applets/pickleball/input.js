@@ -29,14 +29,23 @@ export const bindingsFor = (custom = {}) => {
   return out
 }
 
+// the sets used at the same time on one keyboard (two people sharing it)
+const SHARED = { p1: ["p1", "p2"], p2: ["p1", "p2"] }
+
 // Rebind one action: the new key replaces the action's first key and is taken off any other
-// action in the same set (so one key never does two things)
+// action in the same set, and off the other player's keys when two share the keyboard (so
+// one key never does two things)
 export const rebind = (custom, set, action, code) => {
   const all = bindingsFor(custom)
   const next = { ...custom, [set]: { ...(custom[set] || {}) } }
-  for (const a of ACTIONS) {
-    const codes = all[set][a].filter((c) => c !== code)
-    if (codes.length !== all[set][a].length) next[set][a] = codes.length ? codes : []
+  for (const s of SHARED[set] || [set]) {
+    for (const a of ACTIONS) {
+      const codes = all[s][a].filter((c) => c !== code)
+      if (codes.length !== all[s][a].length) {
+        if (next[s] === custom[s]) next[s] = { ...(custom[s] || {}) }
+        next[s][a] = codes
+      }
+    }
   }
   const mine = all[set][action].filter((c) => c !== code)
   next[set][action] = [code, ...mine.slice(0, 1)]

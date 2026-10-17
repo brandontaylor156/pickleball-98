@@ -22,6 +22,8 @@
 //   bc:list   {}  -> { ok, live: [info] }   the broadcasts you may watch (your buddies')
 // Server -> client: bc:t <bytes> (volatile), bc:ev event, bc:info { id, viewers },
 // bc:react { e, name }, bc:end { id, reason }, bc:live info (to buddies when one starts).
+// A host whose broadcast ended while its connection was down ("left") gets that bc:end on
+// its first bc:tick after reconnecting.
 
 const crypto = require("crypto")
 
@@ -67,6 +69,9 @@ const limiter = (perSecond, now) => {
   const hits = new Map()
   return (key) => {
     const t = now()
+    // (people who've gone quiet are forgotten now and then: every computer that ever went live
+    // or reacted would otherwise stay here for good)
+    if (hits.size > 500) for (const [k, list] of hits) if (!list.length || t - list[list.length - 1] >= 1000) hits.delete(k)
     const arr = (hits.get(key) || []).filter((x) => t - x < 1000)
     if (arr.length >= perSecond) {
       hits.set(key, arr)
@@ -85,6 +90,11 @@ const createBroadcasts = ({ emit = () => {}, emitVolatile = null, aim = () => nu
   const byHost = new Map() // pid -> id
   const watching = new Map() // pid -> id
   const pushedAt = new Map() // `${host}>${buddy}` -> ms
+  // broadcasts that ended while their host may not have heard (its connection dropped): the
+  // phone is told with bc:end on its next tick after it reconnects. "p:<pid>" / "k:<player key>"
+  // -> { id, reason, at }
+  const endedFor = new Map()
+  const ENDED_KEEP_MS = 15 * 60 * 1000
   const tickOk = limiter(TICK_RATE, now)
   const eventOk = limiter(EVENT_RATE, now)
   const reactOk = limiter(REACT_RATE, now)
@@ -138,11 +148,29 @@ const createBroadcasts = ({ emit = () => {}, emitVolatile = null, aim = () => nu
     }
     emit(b.host.pid, "bc:end", { id: b.id, reason })
     b.viewers.clear()
+    // (only a drop: the host heard every other end itself; the client takes "left" as "go live
+    // again", where "ended"/"time" would show Broadcast over)
+    if (reason !== "left") return
+    const t = now()
+    if (endedFor.size > 500) for (const [k, x] of endedFor) if (t - x.at > ENDED_KEEP_MS) endedFor.delete(k)
+    const note = { id: b.id, reason, at: t }
+    endedFor.set(`p:${b.host.pid}`, note)
+    if (b.host.key) endedFor.set(`k:${b.host.key}`, note)
+  }
+  // a tick from someone who isn't live: if their broadcast ended while they were away, say so
+  // (once), or the phone would keep showing LIVE and sending to nothing
+  const tellEnded = (pid, key) => {
+    const x = endedFor.get(`p:${pid}`) || (key ? endedFor.get(`k:${key}`) : null)
+    if (!x) return
+    for (const [k, y] of endedFor) if (y === x) endedFor.delete(k)
+    if (now() - x.at <= ENDED_KEEP_MS) emit(pid, "bc:end", { id: x.id, reason: x.reason })
   }
 
   // ---- the host ----
   const start = (me, p) => {
     if (byHost.has(me.pid)) end(broadcasts.get(byHost.get(me.pid)), "replaced")
+    endedFor.delete(`p:${me.pid}`)
+    if (me.key) endedFor.delete(`k:${me.key}`)
     if (broadcasts.size >= L.maxBroadcasts) return { ok: false, error: "Too many games are live right now. Try again in a little while." }
     const id = crypto.randomBytes(6).toString("hex")
     const b = {
@@ -190,10 +218,10 @@ const createBroadcasts = ({ emit = () => {}, emitVolatile = null, aim = () => nu
     return { ok: true, id, code: b.code }
   }
 
-  const tick = (pid, data) => {
+  const tick = (pid, data, key = null) => {
     const id = byHost.get(pid)
     const b = id && broadcasts.get(id)
-    if (!b) return
+    if (!b) return tellEnded(pid, key)
     const buf = Buffer.isBuffer(data) ? data : data instanceof ArrayBuffer ? Buffer.from(data) : ArrayBuffer.isView(data) ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : null
     if (!validTick(buf) || !tickOk(pid)) return
     totals.ticksIn++
@@ -297,7 +325,7 @@ const createBroadcasts = ({ emit = () => {}, emitVolatile = null, aim = () => nu
       const computer = current()
       if (!computer) return
       try {
-        tick(computer.pid, data)
+        tick(computer.pid, data, who(computer)?.key || null)
       } catch {
         // a bad tick is just dropped
       }

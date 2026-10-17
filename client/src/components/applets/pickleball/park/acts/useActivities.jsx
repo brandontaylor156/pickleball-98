@@ -87,6 +87,9 @@ export const useActivities = ({ world, prefs, setPrefs, mobile = false, showPad 
   const linkRef = useRef(null)
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
+  const worldRef = useRef(world)
+  worldRef.current = world
+  const startNo = useRef(0) // (the latest start wins; out of the park, none)
   const say = (text) => setNote({ text, id: Date.now() })
   useEffect(() => {
     if (!note) return
@@ -154,6 +157,7 @@ export const useActivities = ({ world, prefs, setPrefs, mobile = false, showPad 
     if (!world || !spot) return
     setSheet(null)
     stopRun(false)
+    const n = ++startNo.current
     let r = null
     try {
       if (spot.kind === "tennis") {
@@ -178,6 +182,11 @@ export const useActivities = ({ world, prefs, setPrefs, mobile = false, showPad 
       return
     }
     if (!r) return
+    // (left the park, or started something else, while it loaded)
+    if (n !== startNo.current || worldRef.current !== world) {
+      opts.link?.close()
+      return
+    }
     linkRef.current = opts.link || null
     if (opts.link) {
       opts.link.on((type) => {
@@ -193,6 +202,7 @@ export const useActivities = ({ world, prefs, setPrefs, mobile = false, showPad 
     setRun(r)
   }
   function stopRun(save = true) {
+    startNo.current++
     const r = runRef.current
     if (!r) return
     runRef.current = null

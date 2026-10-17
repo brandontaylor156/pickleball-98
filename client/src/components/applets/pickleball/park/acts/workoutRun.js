@@ -163,17 +163,26 @@ export const createWorkoutRun = ({ spot, mode = "daily", move = null, link = nul
   }
 
   // ---- the camera: real reps (opt-in) ----
+  let camGen = 0 // (stopped while asking for the camera or loading the model: that start lets go)
   const startCamera = async () => {
     blockTelemetry()
+    stopCamera()
+    const my = camGen
+    cam.status = "starting"
     try {
-      cam.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 360 } }, audio: false })
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 360 } }, audio: false })
+      if (my !== camGen) return stream.getTracks().forEach((tr) => tr.stop())
+      cam.stream = stream
       if (cam.video) cam.video.srcObject = cam.stream
       cam.status = "loading"
       emitHud(true)
       const { createLandmarker } = await import("../../twin/poseModel.js")
-      cam.lm = await createLandmarker({ model: "lite", mode: "VIDEO" })
+      const lm = await createLandmarker({ model: "lite", mode: "VIDEO" })
+      if (my !== camGen) return lm?.close?.()
+      cam.lm = lm
       cam.status = "on"
     } catch (err) {
+      if (my !== camGen) return
       cam.status = "error"
       cam.error = err?.name === "NotAllowedError" ? "The camera wasn't allowed: tapping counts instead." : "The camera couldn't start: tapping counts instead."
       stopCamera()
@@ -181,15 +190,19 @@ export const createWorkoutRun = ({ spot, mode = "daily", move = null, link = nul
     emitHud(true)
   }
   const stopCamera = () => {
+    camGen++
     for (const tr of cam.stream?.getTracks?.() || []) tr.stop()
     cam.stream = null
     try {
       cam.lm?.close?.()
     } catch {}
     cam.lm = null
+    // (a camera still starting, or on, is off now: the screen stops saying "Starting the
+    // camera..." after the workout ends; an error stays to be read)
+    if (cam.status !== "error") cam.status = "off"
   }
   const camStep = (t) => {
-    if (cam.status !== "on" || cam.busy || !cam.video || cam.video.readyState < 2) return
+    if (cam.status !== "on" || cam.busy || !cam.lm || !cam.video || cam.video.readyState < 2) return
     const nowMs = performance.now()
     if (nowMs - cam.last < 110) return
     cam.last = nowMs

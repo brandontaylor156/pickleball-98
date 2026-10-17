@@ -39,7 +39,7 @@ export const makeRacket = (color = "#1d3557") => {
   const frame = matFor(color)
   g.add(new THREE.Mesh(p.head, frame), new THREE.Mesh(p.throatL, frame), new THREE.Mesh(p.throatR, frame))
   g.add(new THREE.Mesh(p.handle, matFor("#222428")))
-  stringMat ??= new THREE.MeshBasicMaterial({ color: 0xf2f2ea, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false })
+  stringMat ??= new THREE.MeshBasicMaterial({ color: 0xf2f2ea, transparent: true, forceSinglePass: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false })
   g.add(new THREE.Mesh(p.strings, stringMat))
   g.userData.racket = true
   return g

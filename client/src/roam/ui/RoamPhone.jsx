@@ -121,17 +121,30 @@ export function RoamPhone({ world, onClose, found = [], life = null, start = nul
   )
 }
 
+// the town's map for search and Maps: asked again every few seconds if it didn't load (a
+// network blip used to leave the search on "Loading the map..." and the map blank until the
+// phone was closed and opened again) -> the effect's cleanup
+const watchNav = (world, setReady) => {
+  let live = true
+  let id = 0
+  const tryLoad = () =>
+    world.loadNav?.().then((ok) => {
+      if (!live) return
+      setReady(ok)
+      if (!ok) id = setTimeout(tryLoad, 4000)
+    })
+  tryLoad()
+  return () => {
+    live = false
+    clearTimeout(id)
+  }
+}
+
 // ---------- search (Maps and Rides) ----------
 function PlaceSearch({ world, onPick, placeholder = "Search places" }) {
   const [q, setQ] = useState("")
   const [ready, setReady] = useState(false)
-  useEffect(() => {
-    let live = true
-    world.loadNav?.().then((ok) => live && setReady(ok))
-    return () => {
-      live = false
-    }
-  }, [world])
+  useEffect(() => watchNav(world, setReady), [world])
   const results = useMemo(() => (ready && q.trim().length >= 2 ? world.searchPlaces(q, 10) : []), [q, ready, world])
   return (
     <div className="rphSearch">
@@ -165,20 +178,20 @@ function MapApp({ world, onRide, onClose }) {
   const [msg, setMsg] = useState("")
   const [ready, setReady] = useState(false)
   const touches = useRef(new Map())
-  useEffect(() => {
-    let live = true
-    world.loadNav?.().then((ok) => live && setReady(ok))
-    return () => {
-      live = false
-    }
-  }, [world])
+  useEffect(() => watchNav(world, setReady), [world])
   // draw the town's roads (once into a path per class), you, friends, the route, the pin
   useEffect(() => {
     if (!ready) return undefined
     const roads = world.navRoads()
     let raf = 0
-    const draw = () => {
+    let last = -1e9
+    // (the whole town's roads on top of the 3D world: about 10 times a second while you look,
+    // at once when a finger or a button moves the view)
+    const draw = (now = performance.now()) => {
       raf = requestAnimationFrame(draw)
+      if (!view.current.dirty && now - last < 100) return
+      last = now
+      view.current.dirty = false
       const cv = ref.current
       if (!cv) return
       const dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -293,9 +306,11 @@ function MapApp({ world, onRide, onClose }) {
       t.y = e.clientY
       const after = Math.hypot(a.x - b.x, a.y - b.y)
       if (before > 10) v.scale = Math.max(0.03, Math.min(3, v.scale * (after / before)))
+      v.dirty = true
       return
     }
     v.follow = false
+    v.dirty = true
     v.cx -= (e.clientX - t.x) / v.scale
     v.cz -= (e.clientY - t.y) / v.scale
     t.x = e.clientX
@@ -331,17 +346,17 @@ function MapApp({ world, onRide, onClose }) {
   }
   return (
     <div className="rphMap">
-      <PlaceSearch world={world} onPick={(p) => (setPin({ x: p.x, z: p.z, name: p.name }), Object.assign(view.current, { cx: p.x, cz: p.z, follow: false, scale: Math.max(view.current.scale, 0.6) }))} />
+      <PlaceSearch world={world} onPick={(p) => (setPin({ x: p.x, z: p.z, name: p.name }), Object.assign(view.current, { cx: p.x, cz: p.z, follow: false, scale: Math.max(view.current.scale, 0.6), dirty: true }))} />
       <div className="rphMapWrap">
         <canvas ref={ref} className="rphCanvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} data-roam="phone-map" />
         <div className="rphZoom">
-          <button type="button" onClick={() => (view.current.scale = Math.min(3, view.current.scale * 1.6))} aria-label="Zoom in">
+          <button type="button" onClick={() => Object.assign(view.current, { scale: Math.min(3, view.current.scale * 1.6), dirty: true })} aria-label="Zoom in">
             +
           </button>
-          <button type="button" onClick={() => (view.current.scale = Math.max(0.03, view.current.scale / 1.6))} aria-label="Zoom out">
+          <button type="button" onClick={() => Object.assign(view.current, { scale: Math.max(0.03, view.current.scale / 1.6), dirty: true })} aria-label="Zoom out">
             −
           </button>
-          <button type="button" onClick={() => (view.current.follow = true)} aria-label="Where am I" data-roam="phone-locate">
+          <button type="button" onClick={() => Object.assign(view.current, { follow: true, dirty: true })} aria-label="Where am I" data-roam="phone-locate">
             ◎
           </button>
         </div>
@@ -594,7 +609,13 @@ function CameraApp({ world }) {
   if (!cam) return <div className="rphPage">The camera isn't available here.</div>
   const take = async (selfie) => {
     setBusy(true)
-    const r = await cam.shoot(world, { selfie, place: world.info?.street || world.town.name })
+    // (a failed render or a blocked download used to leave both buttons greyed out for good)
+    let r
+    try {
+      r = await cam.shoot(world, { selfie, place: world.info?.street || world.town.name })
+    } catch {
+      r = { ok: false, error: "The picture didn't come out." }
+    }
     setBusy(false)
     setShot(r)
   }
@@ -616,12 +637,22 @@ function CameraApp({ world }) {
 
 // ---------- Music ----------
 function MusicApp({ world }) {
+  // (the world's own radio, read live: getting out of a car turns it off, and a copy kept here
+  // went on showing Pause, so the next tap "paused" a radio that was already off)
   const [on, setOn] = useState(!!world.radioOn)
+  useEffect(() => {
+    const id = setInterval(() => setOn(!!world.radioOn), 500)
+    return () => clearInterval(id)
+  }, [world])
+  const toggle = () => {
+    world.music(!world.radioOn)
+    setOn(!!world.radioOn)
+  }
   return (
     <div className="rphPage">
       <div className="rphBig">🎵 98 FM</div>
       <p>Lo-fi for the drive (or the walk).</p>
-      <button type="button" className="rphPrimary" onClick={() => (world.music(!on), setOn(!on))} data-roam="phone-music">
+      <button type="button" className="rphPrimary" onClick={toggle} data-roam="phone-music">
         {on ? "⏸ Pause" : "▶ Play"}
       </button>
     </div>

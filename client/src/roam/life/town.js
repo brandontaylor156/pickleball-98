@@ -99,6 +99,7 @@ export const createTownLife = ({ world, host, social = null, onEvent = () => {} 
   const stores = [] // { kind: "club" | "mall", name, key, x, z, door?, sign? }
   let navAsked = false
   const fixed = new Set()
+  const fixAt = new Map() // place id -> when to look for its building again (ms)
 
   // the map's warehouse clubs and malls (places.json), their doors found once you're near
   const findStores = async () => {
@@ -215,20 +216,30 @@ export const createTownLife = ({ world, host, social = null, onEvent = () => {} 
       if (!navAsked) findStores()
       const me = world.meNow()
       if (!me) return
-      for (const s of stores) if (!s.door && s.tries < 40 && Math.hypot(s.x - me.x, s.z - me.z) < 320) {
+      // (a store's building looked for once a second, 40 times, while you're near: buildingAt
+      // looks through every building drawn near you, and 40 frames in a row was a hitch)
+      const nowS = Date.now()
+      for (const s of stores) if (!s.door && s.tries < 40 && (s.at || 0) <= nowS && Math.hypot(s.x - me.x, s.z - me.z) < 320) {
         s.tries++
+        s.at = nowS + 1000
         placeDoor(s)
       }
       // a place set from far off on the map (its door still the tapped spot): its building's
       // real door once the building is loaded near you
       for (const p of placesHere()) {
         if (p.door.x !== p.x || p.door.z !== p.z || fixed.has(p.id) || Math.hypot(p.x - me.x, p.z - me.z) > 300) continue
+        // (once a second: buildingAt looks through every building drawn near you, and a spot
+        // with no building by it was looked for again every frame for as long as you were near)
+        const now = Date.now()
+        if ((fixAt.get(p.id) || 0) > now) continue
+        fixAt.set(p.id, now + 1000)
         const b = world.buildingAt(p.x, p.z, 30)
         if (!b) continue
         fixed.add(p.id)
         const road = world.nearestRoadPoint?.(b.x, b.z)
         const door = doorFor(b, road || { x: p.x, z: p.z - 100 })
-        if (door) life?.savePlace({ ...p, x: Math.round(b.x * 10) / 10, z: Math.round(b.z * 10) / 10, door })
+        // (the save failed outright (offline a moment): tried again in a second)
+        if (door) Promise.resolve(life?.savePlace({ ...p, x: Math.round(b.x * 10) / 10, z: Math.round(b.z * 10) / 10, door })).catch(() => fixed.delete(p.id))
       }
     },
     netEvent(type, d) {

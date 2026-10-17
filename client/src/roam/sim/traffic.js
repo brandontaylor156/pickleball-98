@@ -175,14 +175,33 @@ export const stopsOn = (road, street) => {
   return out
 }
 
+const SOLID_K = [-1.4, 0, 1.4] // (a car's three circles, metres along it)
+
 // world: { roads (the drivable roads near you), street (the stop/signal nodes), people: [{ x, z }]
 // (you and friends, on foot or in cars), time (s) }
 export const createTraffic = ({ cap = 8, seed = 1 } = {}) => {
   const rand = rng(seed)
   const cars = []
   let nextId = 1
+  // (the roads as a set and the traffic ones, kept while world.roads is the same list: no
+  // includes/filter over every road every frame)
+  let roadsOf = null
+  let roadsLen = -1
+  let roadSet = new Set()
+  let drivable = []
+  const roadsFor = (world) => {
+    if (world.roads === roadsOf && world.roads.length === roadsLen) return
+    roadsOf = world.roads
+    roadsLen = world.roads.length
+    roadSet = new Set(world.roads)
+    drivable = world.roads.filter(trafficRoad)
+  }
+  // (solids(): one pool of circles, refilled each call)
+  const solidPool = []
+  const solidOut = []
   const spawn = (world, center) => {
-    const roads = world.roads.filter(trafficRoad)
+    roadsFor(world)
+    const roads = drivable
     if (!roads.length) return null
     for (let tries = 0; tries < 12; tries++) {
       // (busier roads more often)
@@ -226,9 +245,10 @@ export const createTraffic = ({ cap = 8, seed = 1 } = {}) => {
     // one step: dt seconds; center: where you are (spawning and dropping round it)
     step(world, center, dt) {
       // come and go
+      roadsFor(world)
       for (let i = cars.length - 1; i >= 0; i--) {
         const c = cars[i]
-        if (Math.hypot(c.x - center.x, c.z - center.z) > 330 || !world.roads.includes(c.road)) cars.splice(i, 1)
+        if (Math.hypot(c.x - center.x, c.z - center.z) > 330 || !roadSet.has(c.road)) cars.splice(i, 1)
       }
       while (cars.length > this.cap) cars.pop()
       if (cars.length < this.cap && rand() < dt * 2) spawn(world, center)
@@ -339,13 +359,20 @@ export const createTraffic = ({ cap = 8, seed = 1 } = {}) => {
       const i = cars.indexOf(c)
       if (i >= 0) cars.splice(i, 1)
     },
-    // circles a car takes up (for your car and you to bump into): [{ x, z, r }]
+    // circles a car takes up (for your car and you to bump into): [{ x, z, r }] (the same array
+    // and circles reused call to call: read it before the next call, don't keep it)
     solids() {
-      const out = []
+      const out = solidOut
+      out.length = 0
       for (const c of cars) {
         const fx = Math.sin(c.yaw)
         const fz = Math.cos(c.yaw)
-        for (const k of [-1.4, 0, 1.4]) out.push({ x: c.x + fx * k, z: c.z + fz * k, r: 0.95 })
+        for (const k of SOLID_K) {
+          const o = solidPool[out.length] || (solidPool[out.length] = { x: 0, z: 0, r: 0.95 })
+          o.x = c.x + fx * k
+          o.z = c.z + fz * k
+          out.push(o)
+        }
       }
       return out
     },

@@ -7,7 +7,7 @@
 import { createAnalyzer } from "../core/analyze.js"
 import { applyH } from "../core/homography.js"
 import { courtRegion, fromCrop, mergePeople, playerBox, scanTiles } from "../core/regions.js"
-import { footPoint, torsoColor } from "../core/tracker.js"
+import { footPoint, LM, torsoColor } from "../core/tracker.js"
 import { detectOnsets } from "../core/onsets.js"
 import { startPose } from "../reader.js"
 import { createLiveHits, createSlots } from "./liveHits.js"
@@ -139,6 +139,26 @@ export const startLive = async ({ video, stream, taps, players = 4, onTick, onHi
     const f = footPoint(p.lm)
     return f ? applyH(Hm, f[0], f[1]) : null
   }
+  // a person's shirt pixels: only the box round their torso is read off the picture (the
+  // whole frame every picture, ~1 MB each, kept the phone's garbage collector busy)
+  const torsoSampler = (lm) => {
+    const pts = [LM.lShoulder, LM.rShoulder, LM.lHip, LM.rHip].map((i) => lm?.[i])
+    if (pts.some((q) => !q)) return null
+    const x0 = Math.max(0, Math.floor(Math.min(...pts.map((q) => q.x))))
+    const y0 = Math.max(0, Math.floor(Math.min(...pts.map((q) => q.y))))
+    const x1 = Math.min(W, Math.ceil(Math.max(...pts.map((q) => q.x))) + 1)
+    const y1 = Math.min(H, Math.ceil(Math.max(...pts.map((q) => q.y))) + 1)
+    if (x1 <= x0 || y1 <= y0) return null
+    const bw = x1 - x0
+    const data = g.getImageData(x0, y0, bw, y1 - y0).data
+    return (x, y) => {
+      const xi = Math.round(x)
+      const yi = Math.round(y)
+      if (xi < x0 || yi < y0 || xi >= x1 || yi >= y1) return null
+      const k = ((yi - y0) * bw + (xi - x0)) * 4
+      return [data[k], data[k + 1], data[k + 2]]
+    }
+  }
   const read = async (box, cut, key, t) => {
     cut.g.fillStyle = "#000"
     cut.g.fillRect(0, 0, cut.c.width, cut.c.height)
@@ -175,14 +195,6 @@ export const startLive = async ({ video, stream, taps, players = 4, onTick, onHi
       const t = clock()
       bg.drawImage(video, 0, 0, big.width, big.height)
       g.drawImage(big, 0, 0, W, H)
-      const img = g.getImageData(0, 0, W, H)
-      const sample = (x, y) => {
-        const xi = Math.round(x)
-        const yi = Math.round(y)
-        if (xi < 0 || yi < 0 || xi >= W || yi >= H) return null
-        const k = (yi * W + xi) * 4
-        return [img.data[k], img.data[k + 1], img.data[k + 2]]
-      }
       const p0 = performance.now()
       let people = []
       const live = analyzer.tracks().filter((tr) => t - tr.lastT < 1)
@@ -203,7 +215,7 @@ export const startLive = async ({ video, stream, taps, players = 4, onTick, onHi
         }
       }
       poseMs += performance.now() - p0
-      for (const p of people) p.color = torsoColor(p.lm, sample)
+      for (const p of people) p.color = torsoColor(p.lm, torsoSampler(p.lm))
       analyzer.push(t, people)
       lastFrameT = t
       n++
@@ -251,13 +263,16 @@ export const startLive = async ({ video, stream, taps, players = 4, onTick, onHi
       if (wait > 4) await new Promise((r) => setTimeout(r, wait))
     }
   }
-  const running = loop().catch((e) => onStatus?.(`Stopped: ${e.message}`))
+  // (the pose model's worker crashing ends the loop with its reason; not after stop())
+  const running = loop().catch((e) => !stopped && onStatus?.(`Stopped: ${e.message}`))
   const ticker = setInterval(() => !stopped && n > 0 && sendTick(clock()), 1000 / TICK_HZ)
   return {
     clock,
     async stop() {
       stopped = true
       clearInterval(ticker)
+      // (a frame still with the pose model mustn't hold the stop up)
+      pose?.abort?.(new Error("stopped"))
       await running
       pose?.close()
       mic?.close()

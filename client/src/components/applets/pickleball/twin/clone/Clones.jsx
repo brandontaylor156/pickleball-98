@@ -119,7 +119,7 @@ export const ClonesPanel = ({ onPlay, onBack }) => {
     setError(null)
     try {
       const c = await readCloneFile(file)
-      saveClone(c)
+      if (!saveClone(c)) setError("There's no room on this device for another clone.")
     } catch (e) {
       setError(e.message || "That isn't a Pickleball 98 clone.")
     }
@@ -157,7 +157,7 @@ export const ClonesPanel = ({ onPlay, onBack }) => {
             </li>
           ))}
         </ul>
-        <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => e.target.files?.[0] && open(e.target.files[0])} />
+        <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => (e.target.files?.[0] && open(e.target.files[0]), (e.target.value = ""))} />
         <div className="pkTwinButtons">
           <button type="button" onClick={() => fileRef.current?.click()}>
             Open a friend's clone...

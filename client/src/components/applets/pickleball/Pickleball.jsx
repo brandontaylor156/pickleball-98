@@ -29,7 +29,8 @@ import { LockerRoom } from "./LockerRoom"
 import { bindingsFor, keyName } from "./input.js"
 import "./Pickleball.css"
 import "./Overlay.css"
-import { helpItem } from "../../../utils/help"
+import { HELP_EVENT, helpItem } from "../../../utils/help"
+import { onInputReset } from "../../../utils/inputGuard"
 import { getClone } from "./twin/clone/store.js"
 import { cloneLevel } from "./twin/clone/profile.js"
 // Real Games (the pickleball you play in real life: sessions, scorekeeper, matches, ladder; applets/pbclub, server/pbclub)
@@ -199,6 +200,8 @@ const CAMERA_NAMES = { broadcast: "Broadcast", tv: "TV high", side: "Sideline", 
 const TONE = { good: "good", bad: "bad", call: "warn", info: "ok" }
 
 let uid = 0
+// the sessions again() (Restart, Play Again, F2) can start over
+const AGAIN_KINDS = new Set(["quick", "clones", "tour", "versus", "train"])
 
 // the line-up for a match against the computer
 const rosterFor = ({ doubles, level, me, outfit, opponent, opponent2 = null, partner, p2, humans = 1 }) => {
@@ -680,7 +683,11 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
     if (e) meterRefs.forEach((r, i) => e.setMeterEl(r.current, i))
   })
 
+  // a start that waits (a venue to build) checks this when it's ready: anything that resets in
+  // the meantime (another start, a double tap, Quit) makes it stale, and it's dropped
+  const startSeq = useRef(0)
   const reset = () => {
+    startSeq.current++
     setResult(null)
     setReward(null)
     setBanners(clearBanners)
@@ -705,7 +712,9 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   }
   const startQuick = async () => {
     const p = prefsRef.current
+    const seq = ++startSeq.current
     const { id, venue } = await playVenue()
+    if (startSeq.current !== seq) return
     reset()
     const roster = rosterFor({ doubles: p.doubles, level: p.level, me: p.character, outfit: p.outfit, opponent: p.opponent, partner: p.partner })
     setSession({ kind: "quick", level: p.level })
@@ -806,7 +815,9 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   }
   const startVersus = async () => {
     const p = prefsRef.current
+    const seq = ++startSeq.current
     const { id, venue } = await playVenue()
+    if (startSeq.current !== seq) return
     reset()
     const roster = rosterFor({ doubles: p.doubles, level: "intermediate", me: p.character, outfit: p.outfit, p2: p.p2, humans: 2 })
     setSession({ kind: "versus" })
@@ -838,7 +849,9 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   const startTrain = async (p0, { intro = true } = {}) => {
     const p = prefsRef.current
     // (practice at your venue too; the ball machine court in My Park is that park's)
+    const seq = ++startSeq.current
     const { id: venueId, venue } = parkGameRef.current?.kind === "machine" ? { id: "park", venue: parkCourtVenue("machine") } : await playVenue()
+    if (startSeq.current !== seq) return
     const plan = planFor(p0)
     reset()
     setTrain(null)
@@ -936,6 +949,8 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   const [parkPick, setParkPick] = useState(false)
   const [parkLoading, setParkLoading] = useState(null)
   const parkLoadingRef = useRef(null)
+  // (each park load's number: leaving, or starting another, makes a load still in flight stop)
+  const parkLoadSeq = useRef(0)
   const [parkStep, setParkStep] = useState(null) // the loading screen's step: { label, pct }
   const [parkErr, setParkErr] = useState(null) // Venue Finder couldn't build a venue: why
   // the picker's badges: how many are in each real venue's online parks (numbers only)
@@ -970,6 +985,8 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   const startPark = async (venueId = parkStartVenue()) => {
     const e = engineRef.current
     if (!e) return
+    const seq = ++parkLoadSeq.current
+    const gone = () => engineRef.current !== e || parkLoadSeq.current !== seq
     let w = parkRef.current
     // (a different venue: the old park goes)
     if (w && w.venue !== venueId) {
@@ -994,12 +1011,14 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
         await nextPaint()
         const [{ createWorld }, layout, cv] = await Promise.all([import("./park/world.js"), loadParkLayout(venueId), import("./park/courtvenue.js")])
         courtVenueRef.current = cv.buildCourtVenue
-        if (engineRef.current !== e) return
+        if (gone()) return
         setParkStep({ label: "Building the courts, buildings and trees", pct: 35 })
         await nextPaint()
+        if (gone()) return
         w = createWorld({ ...e.worldContext(), layout, phone: !!mobile, me: myParkInfo(), labelsEl: parkLabelsRef.current, onHud: setParkHud, onEvent: (ev) => parkEventRef.current?.(ev), memory: readParkMemory(venueId), onMemory: (mem) => writeParkMemory(venueId, mem), sky: { real: prefsRef.current.realSky !== false, mode: prefsRef.current.skyMode || "real" } })
       } catch (error) {
         console.error(error)
+        if (gone()) return
         parkLoadingRef.current = null
         setParkStep(null)
         setParkLoading(null)
@@ -1019,12 +1038,15 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
       // the first picture: shaders compile and textures upload behind the loading screen
       setParkStep({ label: "Lighting it up", pct: 75 })
       await nextPaint()
+      if (gone()) return
       w.resume()
       e.setWorld(w)
       await Promise.race([e.ready, new Promise((r) => setTimeout(r, 8000))])
+      if (gone()) return
       loadLiving(venueId, w, { away: true })
       setParkStep({ label: "Here we go", pct: 100 })
       await nextPaint()
+      if (gone()) return
       parkLoadingRef.current = null
       setParkLoading(null)
       setParkStep(null)
@@ -1186,6 +1208,11 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   }
   const leavePark = () => {
     const w = parkRef.current
+    // (left while the park was still loading: that load stops, the loading screen goes)
+    parkLoadSeq.current++
+    parkLoadingRef.current = null
+    setParkLoading(null)
+    setParkStep(null)
     parkRef.current = null
     parkGameRef.current = null
     setParkWorld(null)
@@ -1365,6 +1392,7 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
     if (online.room && screen !== "online") setScreen("online")
   }, [online.room?.id])
   const startOnlineEngine = async (opts) => {
+    const seq = ++startSeq.current
     const drill = opts?.settings?.mode === "drill" ? coopById(opts.settings.drill).id : null
     // (a real venue: everyone builds that venue's court at the room's time of day)
     if (opts?.settings && !(parkRef.current && parkGameRef.current?.kind === "room") && opts.settings.venue && !isArena(opts.settings.venue)) {
@@ -1375,6 +1403,7 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
         opts = { ...opts, settings: { ...opts.settings, venue: "park" } }
       }
     }
+    if (startSeq.current !== seq || !onlineRef.current?.room) return // (left the room, or a newer start, while it built)
     // (drilling with a friend: the host's match runs the drill; the guest hears its reports)
     if (drill && opts.role === "host") opts = { ...opts, settings: { ...opts.settings, doubles: false, practice: createCoop(drill) } }
     const e = engineRef.current
@@ -1411,11 +1440,17 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
     startOnlineEngine({ role: "host", seat: room.you, ...start, send: { snap: o.sendSnap, relay: (d, to) => o.sendRelay(d, to) } })
   }
   const roundKey = online.room && online.phase === "playing" ? `${online.room.id}:${online.room.round}` : null
+  // "this is me": your player, outfit and look for this room's venue (checked again by the
+  // server and the host)
+  const myHello = () => {
+    const p = prefsRef.current
+    const look = lookPayload(lookForPlayer(p, { character: p.character, outfit: p.outfit }, onlineRef.current.room?.settings?.venue || null))
+    return { type: "hello", character: p.character, outfit: p.outfit, look }
+  }
   useEffect(() => {
     if (!roundKey) return
     const p = prefsRef.current
-    // (your look for this room's venue, checked again by the server and the host)
-    const myLook = lookPayload(lookForPlayer(p, { character: p.character, outfit: p.outfit }, online.room?.settings?.venue || null))
+    const myLook = myHello().look
     // (a guest's hello can beat this effect here: keep this round's hellos, start fresh only for a
     // new round)
     if (hellos.key !== roundKey) {
@@ -1427,8 +1462,13 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
       // wait a moment for everyone's "this is me" (their player and outfit), then go
       const humans = online.room.seats.filter((s) => s && !s.bot).length
       if (humans <= 1) hostStart()
-      else later(hostStart, 1600)
-    } else online.sendRelay({ type: "hello", character: p.character, outfit: p.outfit, look: myLook })
+      else {
+        // (ask again: a host whose page reloaded mid-match comes back here while its guests
+        // are already playing, and they'd never say hello again)
+        online.sendRelay({ type: "who" })
+        later(hostStart, 1600)
+      }
+    } else online.sendRelay(myHello())
   }, [roundKey])
   // the relay: snapshots, inputs, hellos, starts and hits
   useEffect(() => {
@@ -1452,10 +1492,14 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
           const humans = o.room?.seats.filter((s) => s && !s.bot).length || 0
           if (hellos.current.size >= humans) hostStart()
         }
-      } else if (d.type === "start" && !o.isHost && o.seat !== null && Array.isArray(d.people)) {
+      } else if (d.type === "who" && !o.isHost && o.seat !== null && engineRef.current?.online) o.sendRelay(myHello()) // (already playing: a new round says hello by itself)
+      else if (d.type === "start" && !o.isHost && o.seat !== null && Array.isArray(d.people)) {
         const key = o.room ? `${o.room.id}:${o.room.round}` : null
-        if (netStarted.current === key && engineRef.current?.online) return
+        // (the same match again, for a late rejoiner: keep playing; a new seed is a new match,
+        // e.g. the host's page reloaded and it started over: start over with it)
+        if (netStarted.current === key && netStarted.seed === d.seed && engineRef.current?.online) return
         netStarted.current = key
+        netStarted.seed = d.seed
         startOnlineEngine({ role: "guest", seat: o.seat, people: d.people, settings: d.settings || {}, seed: d.seed, send: { input: o.sendInput, relay: (x) => o.sendRelay(x) } })
       } else if (d.type === "hit") engineRef.current?.netRelay(d, from)
       else if (d.type === "final" && !o.isHost) engineRef.current?.netFinal(d)
@@ -1516,9 +1560,10 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
     const R = 48
     const down = (e) => {
       // the hit zones: the finger aims (on their court: right there; elsewhere: drag)
-      if (!aimTouch.current && !swipeTouch.current && e.target.closest?.('[data-control="hit"], [data-control="hitTop"]')) {
+      if (aimTouch.current == null && !swipeTouch.current && e.target.closest?.('[data-control="hit"], [data-control="hitTop"]')) {
         if (schemeRef.current === "swipe") {
-          swipeTouch.current = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }] }
+          const r = stage.getBoundingClientRect()
+          swipeTouch.current = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }], size: { width: r.width, height: r.height } }
           trailApi.current?.start(swipeTouch.current.pts[0])
           engineRef.current?.swipe("start", swipeTouch.current.pts)
           return
@@ -1553,9 +1598,9 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
         if (sw.pts.length > 64) sw.pts.splice(1, 1)
         // the trail: every coalesced point (a fast flick between frames still draws its
         // curve), tinted by the pace swiped so far
+        // (the stage's size from the swipe's start: no layout read per finger move)
         if (trailApi.current) {
-          const r = stage.getBoundingClientRect()
-          const tint = swipeLook(readSwipe(sw.pts, { width: r.width, height: r.height })).color
+          const tint = swipeLook(readSwipe(sw.pts, sw.size)).color
           const evs = e.getCoalescedEvents?.() || []
           for (const c of evs.length ? evs : [e]) trailApi.current.move({ x: c.clientX, y: c.clientY, t: performance.now() }, tint)
         }
@@ -1607,10 +1652,7 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
         const last = { x: e.clientX, y: e.clientY, t: performance.now() }
         sw.pts.push(last)
         if (e.type === "pointercancel") trailApi.current?.cancel()
-        else {
-          const r = stage.getBoundingClientRect()
-          trailApi.current?.end(last, readSwipe(sw.pts, { width: r.width, height: r.height }))
-        }
+        else trailApi.current?.end(last, readSwipe(sw.pts, sw.size))
         engineRef.current?.swipe(e.type === "pointercancel" ? "cancel" : "end", sw.pts)
         return
       }
@@ -1627,6 +1669,28 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
       if (stickBase.current) delete stickBase.current.dataset.on
       if (hintRef.current) delete hintRef.current.dataset.off
     }
+    // a press the page lost (the app put away, the phone turned, so no pointerup or
+    // pointercancel ever comes: utils/inputGuard.js), or the pad going away mid-press, lets go
+    // of all three, so the next touch starts fresh and your player doesn't keep walking
+    const releaseAll = () => {
+      const sw = swipeTouch.current
+      if (sw) {
+        swipeTouch.current = null
+        trailApi.current?.cancel()
+        engineRef.current?.swipe("cancel", sw.pts)
+      }
+      if (aimTouch.current != null) {
+        aimTouch.current = null
+        engineRef.current?.touchAim("end")
+      }
+      if (stick.current) {
+        stick.current = null
+        engineRef.current?.setStick(0, 0)
+        if (stickBase.current) delete stickBase.current.dataset.on
+        if (hintRef.current) delete hintRef.current.dataset.off
+      }
+    }
+    const offReset = onInputReset(releaseAll)
     stage.addEventListener("pointerdown", down, true)
     stage.addEventListener("pointermove", move, true)
     stage.addEventListener("pointerup", up, true)
@@ -1645,6 +1709,8 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
     measure()
     return () => {
       clearInterval(t)
+      offReset()
+      releaseAll()
       stage.removeEventListener("pointerdown", down, true)
       stage.removeEventListener("pointermove", move, true)
       stage.removeEventListener("pointerup", up, true)
@@ -1673,6 +1739,8 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   const padSide = prefs.padSide
   const scheme = prefs.scheme || "swipe"
   const controls = useMemo(() => touchControlsFor(padSide, fromPx, scheme).map((c) => (c.id === "pause" ? { ...c, icon: GLYPHS.pause } : c)), [padSide, scheme])
+  // (practice has its own pause in its bar: one pause button on screen, not two)
+  const trainControls = useMemo(() => controls.filter((c) => c.id !== "pause"), [controls])
   const padPress = (action) => {
     const e = engineRef.current
     if (!e || action === "move") return
@@ -1687,6 +1755,21 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
   useEffect(() => {
     if (editing && engineRef.current?.status === "playing") engineRef.current.pause()
   }, [editing])
+  // Help (the ? button, a menu or F1) opens over the court: the match waits instead of
+  // playing on behind it (an online match can't wait)
+  useEffect(() => {
+    const hold = () => {
+      const e = engineRef.current
+      if (e?.status === "playing" && !e.online) e.pause()
+    }
+    const onKey = (ev) => ev.key === "F1" && hold()
+    window.addEventListener(HELP_EVENT, hold)
+    window.addEventListener("keydown", onKey)
+    return () => {
+      window.removeEventListener(HELP_EVENT, hold)
+      window.removeEventListener("keydown", onKey)
+    }
+  }, [])
   const setEditingAndFocus = (value) => {
     setEditing(value)
     if (!value) stageRef.current?.focus({ preventScroll: true })
@@ -1922,7 +2005,8 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
                 <button type="button" className="pkPrimary" onClick={() => engineRef.current?.resume()} autoFocus>
                   Resume
                 </button>
-                {session && session.kind !== "tutorial" && (
+                {/* (only what again() can start over: a tournament or park game has no Restart) */}
+                {AGAIN_KINDS.has(session?.kind) && (
                   <button type="button" onClick={again}>
                     Restart
                   </button>
@@ -2359,7 +2443,7 @@ const Pickleball = ({ onClose, mobile, handoff }) => {
             key={layoutKey(padSide)}
             game={layoutKey(padSide)}
             gear={false}
-            controls={controls}
+            controls={session?.kind === "train" ? trainControls : controls}
             onPress={padPress}
             onRelease={padRelease}
             show={phase === "playing" && !tutorialStep?.card && !(isOnline && online.phase === "over")}

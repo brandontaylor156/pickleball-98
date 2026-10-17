@@ -43,6 +43,14 @@ const set = (next) => {
 }
 
 export const getPlayer = () => current
+// "Pick a name" from anywhere in the game (App.jsx opens the name box): a screen that needs a
+// name can offer the button right where it says so
+const PICK_NAME = "pk98:pick-name"
+export const askForName = () => globalThis.window?.dispatchEvent(new Event(PICK_NAME))
+export const onAskForName = (fn) => {
+  globalThis.window?.addEventListener(PICK_NAME, fn)
+  return () => globalThis.window?.removeEventListener(PICK_NAME, fn)
+}
 
 export const subscribePlayer = (fn) => {
   listeners.add(fn)

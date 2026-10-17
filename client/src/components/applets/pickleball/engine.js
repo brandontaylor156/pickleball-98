@@ -228,7 +228,10 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
   trailGeo.setAttribute("position", new THREE.BufferAttribute(trailPos, 3))
   trailGeo.setAttribute("color", new THREE.BufferAttribute(trailCol, 4))
   trailGeo.setIndex(trailIdx)
-  const trail = new THREE.Mesh(trailGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }))
+  // (forceSinglePass on flat see-through things: three draws a transparent DoubleSide material
+  // twice, rebuilding its program parameters each time, every frame; a flat ribbon, ring, net
+  // or fence looks the same in one pass)
+  const trail = new THREE.Mesh(trailGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, forceSinglePass: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }))
   trail.frustumCulled = false
   trail.renderOrder = 4
   scene.add(trail)
@@ -242,7 +245,7 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
   landRing.renderOrder = 3
   scene.add(landRing)
   // where you'll meet the ball: orange above the net (attack it), pale blue below (keep it soft)
-  const contactRing = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.1, 24), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, side: THREE.DoubleSide }))
+  const contactRing = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.1, 24), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, forceSinglePass: true, opacity: 0.85, depthWrite: false, depthTest: false, side: THREE.DoubleSide }))
   contactRing.visible = false
   contactRing.renderOrder = 6
   scene.add(contactRing)
@@ -268,7 +271,7 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3))
     geo.setAttribute("color", new THREE.BufferAttribute(col, 4))
     geo.setIndex(idx)
-    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }))
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, forceSinglePass: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }))
     mesh.frustumCulled = false
     mesh.renderOrder = 5
     mesh.visible = false
@@ -593,6 +596,7 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
     record = []
     cut = null
     humans = opts.humans || 1
+    chargeKey[0] = chargeKey[1] = null // (a swing held into the last match's end doesn't block this one's first press)
     setVenue(opts.venue || (demo ? "stadium" : venueId))
     // (Game speed Medium and Slow: the real between-points routine, measured on the PPA Tour;
     // Fast keeps the quick one. Practice and the title's demo always run quick.)
@@ -797,10 +801,15 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
         container.focus({ preventScroll: true })
         return
       }
-      if (container.contains(a)) return
+      // (the window itself losing focus, alt-tab, leaves the game focused as the page's active
+      // element: the keys held then never come up here either)
+      if (container.contains(a) && document.hasFocus()) return
       keys.clear()
       world?.clearKeys?.()
       updateMove()
+      // (a swing held as focus went: its key never comes up, so it would block the next press)
+      chargeKey[0] = chargeKey[1] = null
+      if (match) for (const p of match.players) if (p.ctrl === "human") p.charge = null
       if (status === "playing" && mode === "local") api.pause()
     }, 0)
   }
@@ -869,6 +878,7 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
   const resize = () => {
     const width = container.clientWidth
     const height = container.clientHeight
+    const fromZero = !size.width || !size.height
     size = { width, height }
     if (!width || !height) {
       if (status === "playing" && mode === "local") api.pause()
@@ -879,7 +889,9 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
     camera.aspect = width / height
     camera.updateProjectionMatrix()
     venue.setScreenCompact?.(portraitScreen())
-    restartClock()
+    // (only a resize from zero restarts the clock: a running loop's resize is an ordinary
+    // frame, not a cut; utils/frameClock.js)
+    if (fromZero) restartClock()
     start()
   }
   const resizeObserver = new ResizeObserver(resize)
@@ -1172,8 +1184,9 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
     ballShadow.visible = !hidden
     ballView = { hidden, x: bx, y: by, z: bz, held: b.held || null, phase: match.phase }
     ballMesh.position.set(bx, Math.max(BALL_R * BALL_SCALE, by), bz)
-    ballMesh.rotation.x += (b.w?.x || 0) * 0.004
-    ballMesh.rotation.z += (b.w?.z || 0) * 0.004
+    // (by the frame's time: the same spin at any frame rate, and none while paused)
+    ballMesh.rotation.x += (b.w?.x || 0) * 0.24 * lastDt
+    ballMesh.rotation.z += (b.w?.z || 0) * 0.24 * lastDt
     // the shadow shrinks and darkens as the ball comes down
     const h = Math.max(0, by - BALL_R)
     const s = BALL_R * BALL_SCALE * 2.8 * (1 + h * 0.3)
@@ -1232,8 +1245,10 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
     const r = match.rally
     const you = mainHuman()
     const show = settings.aid && status === "playing" && mode !== "demo" && !replay && you && r && r.lastTeam !== null && r.lastTeam !== you.team && r.bounces === 0 && !r.pending && !r.over && !match.ball.held
-    if (!show) landRing.visible = false
-    else if (aidVersion !== match.version) {
+    if (!show) {
+      landRing.visible = false
+      aidVersion = -1 // (shown again, e.g. after a pause, it's worked out again)
+    } else if (aidVersion !== match.version) {
       aidVersion = match.version
       const path = predictPath({ p: match.ball.p, v: match.ball.v, w: match.ball.w, kind: match.ball.kind }, { maxT: 2.5, every: 1 / 30, maxBounces: 1 })
       const land = path.find((s) => s.bounce)
@@ -1752,7 +1767,7 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
   // Focus: on an easy setting (or when asked), time slows while a hard ball is coming at you
   // at the net, so a hand battle can be learned
   let focus = 1
-  const focusScale = () => {
+  const focusScale = (dt = 1 / 60) => {
     let want = 1
     if (mode === "local" && match && match.phase === "rally" && !devAuto.size) {
       const on = settings.focus === "on" || (settings.focus === "auto" && (match.o.level === "beginner" || !!match.practice))
@@ -1763,7 +1778,8 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
         }
       }
     }
-    focus += (want - focus) * (want < focus ? 0.5 : 0.15)
+    // (eased per 60 Hz frame's worth of time, so it eases the same at 30, 60 or 120 fps)
+    focus += (want - focus) * (1 - Math.pow(want < focus ? 0.5 : 0.85, dt * 60))
     return focus
   }
 
@@ -1825,7 +1841,7 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
       } else {
         if (mode === "demo") match.autoplay = true
         if (devAuto.size && mode !== "demo") for (const slot of devAuto) autopilot(match, slot, devJitter)
-        perf.steps += advance(match, dt * focusScale() * paceScale())
+        perf.steps += advance(match, dt * focusScale(dt) * paceScale())
         if (host) host.capture(match.events)
         handleEvents()
       }
@@ -2023,6 +2039,7 @@ export const createEngine = ({ canvas, container, onHud, onEvent, onStatus, sett
       record = []
       cut = null
       humans = 1
+      chargeKey[0] = chargeKey[1] = null
       netWait = null
       setVenue(s.venueBuild || s.venue || "stadium")
       // (each person's own Locker Room look, checked; or their player's kit)

@@ -69,6 +69,7 @@ import {
 } from "./layout"
 import { resetLayout, saveLayout, setControlPrefs, useControlsStore } from "./store"
 import { GearIcon } from "./icons"
+import { onInputReset } from "../../../utils/inputGuard"
 import "./TouchControls.css"
 
 const useAreaSize = (ref) => {
@@ -215,6 +216,9 @@ const TouchControls = ({
     releaseAll()
     repeats.current.forEach((_, id) => stopRepeat(id))
   }, [])
+  // A press the page lost (the app put away, the phone turned: utils/inputGuard.js) lets go,
+  // or its stale pointer would keep the button "held" and its next press would do nothing
+  useEffect(() => onInputReset(releaseAll), [])
 
   // ---- editing ----
   const [draft, setDraft] = useState(null)
@@ -255,6 +259,8 @@ const TouchControls = ({
               onLostPointerCapture: up(c),
               onContextMenu: (e) => e.preventDefault(),
             }
+            // (buttons act on pointerdown and never click: data-touch-surface keeps them out of
+            // inputGuard.js's "taps with no click" reset)
             if (isZone(c)) {
               return <div key={c.id} className="tcZone" data-control={c.id} aria-label={c.label} style={pxStyle(rects[c.id])} {...handlers} />
             }
@@ -266,6 +272,7 @@ const TouchControls = ({
                 aria-label={c.label}
                 aria-disabled={c.ariaDisabled === undefined ? undefined : String(!!c.ariaDisabled)}
                 data-control={c.id}
+                data-touch-surface=""
                 className={`tcButton tcShape--${c.shape || "rect"} ${pressed.has(c.id) ? "is-pressed" : ""} ${c.className || ""}`}
                 style={pxStyle(rects[c.id], { "--tc-opacity": shown.alpha * shown.opacity[c.id] })}
                 {...handlers}

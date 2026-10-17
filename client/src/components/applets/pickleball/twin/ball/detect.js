@@ -148,13 +148,16 @@ export const sameFrame = (a, b) => {
 export const createBallFinder = ({ W, H, region, exclude = () => [], opts = {}, scorer = null }) => {
   let a = null
   let b = null
+  let spare = null // the frame that dropped out of the window, its buffer reused (no ~1 MB copy a frame)
   return {
     push(t, rgba) {
       // a repeated frame (a phone that dropped frames, a variable-rate recording) has no
       // motion against its twin: skip it, the next new frame takes its place
       const last = b || a
       if (last && sameFrame(last.px, rgba)) return null
-      const frame = { t, px: new Uint8ClampedArray(rgba) }
+      const px = spare && spare.length === rgba.length ? (spare.set(rgba), spare) : new Uint8ClampedArray(rgba)
+      spare = null
+      const frame = { t, px }
       if (!a) {
         a = frame
         return null
@@ -166,6 +169,7 @@ export const createBallFinder = ({ W, H, region, exclude = () => [], opts = {}, 
       let found = detectBall(a.px, b.px, frame.px, W, H, region, { ...opts, exclude: exclude(b.t) })
       if (scorer && found.length) found = rescore(scorer, a.px, b.px, frame.px, W, H, found)
       const out = { t: b.t, cands: found }
+      spare = a.px
       a = b
       b = frame
       return out

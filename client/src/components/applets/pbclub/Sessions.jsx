@@ -52,9 +52,20 @@ const forecastFor = (venue) => {
     forecasts.set(
       venue.id,
       fetch(forecastUrl(venue))
-        .then((r) => r.json())
-        .then(shapeForecast)
-        .catch(() => null)
+        .then((r) => {
+          if (!r.ok) throw new Error(`forecast ${r.status}`)
+          return r.json()
+        })
+        .then((json) => {
+          const f = shapeForecast(json)
+          if (!f) throw new Error("no forecast")
+          return f
+        })
+        .catch(() => {
+          // (a failed forecast isn't kept: the next look asks again)
+          forecasts.delete(venue.id)
+          return null
+        })
     )
   return forecasts.get(venue.id)
 }
@@ -411,6 +422,7 @@ export const SessionView = ({ session, state, buddies, onBack, onScore, onEdit }
   const weather = useSessionWeather(session)
   const [text, setText] = useState("")
   const [msg, setMsg] = useState(null)
+  const [sending, setSending] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [pick, setPick] = useState([])
   const links = core.mapsLinks(session.venue)
@@ -545,14 +557,24 @@ export const SessionView = ({ session, state, buddies, onBack, onScore, onEdit }
             className="pbChatForm"
             onSubmit={async (e) => {
               e.preventDefault()
-              if (!text.trim()) return
-              const r = await club.say(session.id, text)
-              if (r.ok) setText("")
-              else setMsg(r.error)
+              // (one send at a time: a double tap mustn't post it twice)
+              if (!text.trim() || sending) return
+              setSending(true)
+              try {
+                const r = await club.say(session.id, text)
+                if (r?.ok) setText("")
+                else setMsg(r?.error || "The message didn't send. Try again.")
+              } catch (err) {
+                setMsg(`The message didn't send (${err?.message || err}).`)
+              } finally {
+                setSending(false)
+              }
             }}
           >
             <input type="text" maxLength={core.LIMITS.chatText} value={text} placeholder="Bringing balls, court 3..." onChange={(e) => setText(e.target.value)} aria-label="Message" data-chat />
-            <button type="submit">Send</button>
+            <button type="submit" disabled={sending}>
+              Send
+            </button>
           </form>
         )}
       </div>

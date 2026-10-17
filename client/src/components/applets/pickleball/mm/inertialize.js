@@ -29,13 +29,13 @@ export const qlogv = (q) => {
     z = -z
     w = -w
   }
-  const s = Math.hypot(x, y, z)
+  const s = Math.sqrt(x * x + y * y + z * z)
   if (s < 1e-8) return { x: 2 * x, y: 2 * y, z: 2 * z }
   const a = (2 * Math.atan2(s, w)) / s
   return { x: x * a, y: y * a, z: z * a }
 }
 export const qexpv = (v) => {
-  const a = Math.hypot(v.x, v.y, v.z)
+  const a = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
   if (a < 1e-8) return qnorm({ x: v.x / 2, y: v.y / 2, z: v.z / 2, w: 1 })
   const s = Math.sin(a / 2) / a
   return { x: v.x * s, y: v.y * s, z: v.z * s, w: Math.cos(a / 2) }

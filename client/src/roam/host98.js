@@ -325,6 +325,11 @@ export const useRoamNet = ({ world, active, look }) => {
         world.setNet(null)
         setState({ joined: false, n: null, people: 0, error: r?.error || null })
       }
+    }).catch((e) => {
+      // (the request failed outright: on your own, as when the server says no)
+      if (!live) return
+      world.setNet(null)
+      setState({ joined: false, n: null, people: 0, error: e?.message || "Couldn't join." })
     })
     return () => {
       live = false

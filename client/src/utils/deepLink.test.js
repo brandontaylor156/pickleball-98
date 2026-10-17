@@ -15,3 +15,10 @@ test("nothing to start, or junk, gives no handoff", () => {
   assert.deepEqual(handoffFromSearch("?venue=x&place=%7Bnot-json", 4), { id: 4, floppy: { mode: "park", venue: "x", place: null } })
   assert.deepEqual(handoffFromSearch("?venue=x&place=%5B1%5D", 5).floppy.place, null)
 })
+
+test("Go Live's share link opens watching (old 98ish-style links too)", () => {
+  assert.deepEqual(handoffFromSearch("?live=b12&code=K7QX", 6), { id: 6, live: "b12", code: "K7QX" })
+  assert.deepEqual(handoffFromSearch("?open=program&name=Pickleball%2098&live=b12&code=K7QX", 7), { id: 7, live: "b12", code: "K7QX" })
+  assert.deepEqual(handoffFromSearch("?live=b12&code=%3Cx%3E", 8), { id: 8, live: "b12", code: null })
+  assert.equal(handoffFromSearch("?live=%3Cscript%3E"), null)
+})

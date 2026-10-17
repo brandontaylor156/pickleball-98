@@ -18,6 +18,8 @@ export const useLiveCourt = ({ world, venue }) => {
     let alive = true
     let current = null // { id, stream, info }
     let feed = null
+    let asking = false // a bc:watch on its way (the server counts us as a viewer once it lands)
+    let leaveLater = false
     const onTick = (b) => current?.stream.addTick(b)
     const onEv = (e) => current?.stream.addEvent(e)
     const onEnd = (d) => {
@@ -26,7 +28,10 @@ export const useLiveCourt = ({ world, venue }) => {
     const stop = () => {
       clearInterval(feed)
       feed = null
-      if (current && socket.connected) socket.emit("bc:unwatch", {}, () => {})
+      // (also while a watch is on its way: the unwatch goes after it on the same socket, so the
+      // server doesn't keep counting someone who left)
+      if ((current || asking) && socket.connected) socket.emit("bc:unwatch", {}, () => {})
+      else if (asking) leaveLater = true // (offline just now: once the answer comes)
       current = null
       world.setLive(null, [])
       if (alive) setShown(null)
@@ -36,8 +41,11 @@ export const useLiveCourt = ({ world, venue }) => {
       const r = await net.request("bc:list", {})
       const here = alive && r?.ok ? (r.live || []).find((b) => b.venue === venue) : null
       if (!here || current) return
-      const w = await net.request("bc:watch", { id: here.id })
-      if (!alive || !w?.ok) return
+      asking = true
+      const w = await net.request("bc:watch", { id: here.id }).finally(() => (asking = false))
+      if (leaveLater && w?.ok && socket.connected) socket.emit("bc:unwatch", {}, () => {})
+      // (another look() got there first while this one waited: one feed, not two)
+      if (!alive || !w?.ok || current) return
       const stream = createStream({ players: w.info.players })
       for (const e of w.events || []) stream.addEvent(e)
       for (const b of w.ring ? splitTicks(w.ring) : []) stream.addTick(b)

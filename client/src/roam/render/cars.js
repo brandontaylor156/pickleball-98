@@ -256,10 +256,14 @@ export const makeCarMesh = (model, color) => {
     dispose() {
       group.removeFromParent()
       envMats.delete(paintMat)
-      paintMat.dispose()
-      trimMat.dispose()
-      shadow.geometry.dispose()
-      for (const c of body.children) if (c.geometry && c.geometry !== g.paint && c.geometry !== g.trim && c.geometry !== g.trimWithWheels) c.geometry.dispose()
+      // (everything but the shared model geometry and the shared shadow material: the paint, the
+      // trim, the shadow plane, and the Sundowner's and the Turbo's own stripes, lip and underglow)
+      const shared = [g.paint, g.trim, g.trimWithWheels, g.wheel]
+      group.traverse((o) => {
+        if (!o.isMesh) return
+        if (!shared.includes(o.geometry)) o.geometry.dispose()
+        if (o.material !== mats.shadow) o.material.dispose()
+      })
     },
   }
 }
@@ -317,7 +321,8 @@ export const createParkedLayer = (scene, cap = 220) => {
           mat4.compose(pos, q, one)
           L.paint.setMatrixAt(i, mat4)
           L.trim.setMatrixAt(i, mat4)
-          L.paint.instanceColor.setXYZ(i, ...col.setHex(c.color).toArray())
+          col.setHex(c.color)
+          L.paint.instanceColor.setXYZ(i, col.r, col.g, col.b)
           if (s < cap * 2) {
             mat4.compose(pos, q, sScale.set((mm.wid + 0.5) / (ref.wid + 0.5), 1, (mm.len + 0.5) / (ref.len + 0.5)))
             shadows.setMatrixAt(s++, mat4)

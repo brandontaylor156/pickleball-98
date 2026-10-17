@@ -140,6 +140,8 @@ const attachNet = (io, { players: initialPlayers = null, graceMs = RESUME_GRACE_
     // Join (or rejoin) the network
     socket.on("net:hello", (payload = {}, ack = () => {}) => {
       if (typeof ack !== "function") return
+      // (a null or odd payload must not throw: a throw here would take the whole server down)
+      if (!payload || typeof payload !== "object") payload = {}
       if (helloLimit(socket.id)) return ack({ ok: false, error: "Too many requests." })
       let token = TOKEN.test(payload.token) ? payload.token : null
       let computer = token && computers.get(token)
@@ -148,10 +150,11 @@ const attachNet = (io, { players: initialPlayers = null, graceMs = RESUME_GRACE_
         computer = null
         token = null
       }
+      // A computer this socket was before (it asked to be someone new, or someone else coming
+      // back) leaves first: it would stay listed for good, its socket taken
+      const previous = current()
+      if (previous && previous !== computer) removeComputer(previous)
       if (!computer) {
-        // A computer this socket was before (it asked to be someone new) leaves first
-        const previous = current()
-        if (previous) removeComputer(previous)
         token = token || crypto.randomBytes(16).toString("hex")
         computer = { token, pid: newId(), guestName: guestName(), visible: true, device: "pc", since: Date.now(), socket: null }
         computers.set(token, computer)

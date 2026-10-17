@@ -91,12 +91,12 @@ export const createLayer = () => {
     return textures.get(text)
   }
   // the split-step ring and the home mark
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 40), new THREE.MeshBasicMaterial({ color: 0x7cf0ff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }))
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 40), new THREE.MeshBasicMaterial({ color: 0x7cf0ff, transparent: true, forceSinglePass: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }))
   ring.rotation.x = -Math.PI / 2
   ring.renderOrder = 4
   ring.visible = false
   group.add(ring)
-  const home = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.22, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }))
+  const home = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.22, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, forceSinglePass: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }))
   home.rotation.x = -Math.PI / 2
   home.renderOrder = 3
   home.visible = false

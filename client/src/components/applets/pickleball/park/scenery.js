@@ -565,7 +565,7 @@ export const buildScenery = ({ group, keep, lambert, std, kit, layout: L, scene:
     })
   )
   netTex.wrapS = netTex.wrapT = THREE.RepeatWrapping
-  const divNetMat = keep(new THREE.MeshBasicMaterial({ map: netTex, color: hex(S.fence?.netColor, 0xffffff), transparent: true, side: THREE.DoubleSide, depthWrite: false }))
+  const divNetMat = keep(new THREE.MeshBasicMaterial({ map: netTex, color: hex(S.fence?.netColor, 0xffffff), transparent: true, forceSinglePass: true, side: THREE.DoubleSide, depthWrite: false }))
   const ropeMat = lambert(hex(S.fence?.netTop, 0x1c1f24))
   for (const f of S.fences) {
     if (f.k === "chain") continue

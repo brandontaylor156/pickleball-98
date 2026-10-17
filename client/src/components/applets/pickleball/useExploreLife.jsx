@@ -22,7 +22,13 @@ const MALL_COLORS = { threads: "#ef476f", court: "#2a9d8f", kicks: "#111111", sw
 let uidN = 0
 const uid = () => `${Date.now().toString(36)}${(++uidN).toString(36)}`.slice(-12)
 
-export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, player = null, flash, setPrefs, prefsRef, hopTo, closePhone = null }) => {
+export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, player = null, flash: flashProp, setPrefs, prefsRef, hopTo, closePhone = null }) => {
+  // (one flash for the hook's whole life, calling the latest: the memos and plugins below keep
+  // their closures for a long while, and a closure over the host's flash kept that render, its
+  // on-screen layers and through them every town left behind, about 30 MB a visit)
+  const flashRef = useRef(flashProp)
+  flashRef.current = flashProp
+  const flash = useRef((...a) => flashRef.current?.(...a)).current
   const closePhoneRef = useRef(closePhone)
   closePhoneRef.current = closePhone
   const [socialState, setSocialState] = useState(null)
@@ -39,6 +45,9 @@ export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, player
   cartRef.current = cart
   const playerRef = useRef(player)
   playerRef.current = player
+  const roamRef = useRef(roamWorld)
+  roamRef.current = roamWorld
+  const enteringRef = useRef(false) // (a door tapped twice: one way in)
   // (no friends list in the standalone game: doing things together asks anyone near you)
   const friends = () => new Set()
   const meName = () => playerRef.current?.name || roamWorld?.host?.me?.name || "You"
@@ -104,13 +113,20 @@ export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, player
   const enter = async ({ kind, place = null, store = null, room = null }) => {
     const town = roamWorld
     const e = engineRef.current
-    if (!town || !e || insideRef.current) return
+    if (!town || !e || insideRef.current || enteringRef.current) return
     const net = town.net
     const label = place ? place.label : store ? (kind === "club" ? STORES.club.name : "The mall") : ""
     const seed = room ? undefined : seedOf(place ? place.id : store ? store.key : kind)
     let r = null
     if (net?.request) {
-      r = await net.request("roam:enter", room ? { room } : { kind, key: store?.key?.replace(/[^a-z0-9:._-]/gi, "").toLowerCase(), label, seed }).catch(() => null)
+      enteringRef.current = true
+      try {
+        r = await net.request("roam:enter", room ? { room } : { kind, key: store?.key?.replace(/[^a-z0-9:._-]/gi, "").toLowerCase(), label, seed }).catch(() => null)
+      } finally {
+        enteringRef.current = false
+      }
+      // (left the town while the server answered: not inside anything)
+      if (roamRef.current !== town || engineRef.current !== e || insideRef.current) return
       if (r && !r.ok) return flash?.(r.error)
     }
     if (!r) r = { room: `local:${kind}`, kind, slot: 0, origin: { x: 25000, z: 25000 }, label, seed }
@@ -309,7 +325,9 @@ export const useExploreLife = ({ engineRef, roamWorld, labelsRef, mobile, player
   )
 
   // ---- what's on screen ----
-  const active = activeRef.current
+  // (the render that leaves town runs before the effect that lets go of it: its social layer
+  // isn't drawn, so nothing on screen holds on to the town)
+  const active = roamWorld ? activeRef.current : null
   const hudProps = active
     ? {
         extra: <SocialButtons state={socialState} onEmotes={() => setOpen((o) => (o === "emotes" ? null : "emotes"))} onTogether={() => setOpen("together")} />,

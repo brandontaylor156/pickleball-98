@@ -95,3 +95,29 @@ test("guests and players, hiding, room invitations and reconnecting", { skip: !i
     close()
   }
 })
+
+test("a null hello is answered, not thrown (a throw in a socket handler stops the server)", { skip: !ioClient && "socket.io-client not installed" }, async () => {
+  const { connect, close } = await setup({ graceMs: 300 })
+  try {
+    const a = await connect(null)
+    assert.equal(a.me.ok, true)
+    assert.match(a.me.me.name, /^GUEST-/)
+  } finally {
+    close()
+  }
+})
+
+test("a socket that takes up another computer's token leaves no ghost of the one it was", { skip: !ioClient && "socket.io-client not installed" }, async () => {
+  const { net, connect, close } = await setup({ graceMs: 5000 })
+  try {
+    const a = await connect()
+    const b = await connect()
+    b.socket.close()
+    await new Promise((r) => setTimeout(r, 100))
+    const again = await a.ask("net:hello", { token: b.me.token })
+    assert.equal(again.me.id, b.me.me.id)
+    assert.equal(net.computers.size, 1, "only the computer the socket is now")
+  } finally {
+    close()
+  }
+})

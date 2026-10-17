@@ -184,10 +184,11 @@ export const virtualPose = (db, v, D = new Array(NB)) => {
   return { D: mirrorD(M, D), hip: { x: -p.hip.x, y: p.hip.y, z: p.hip.z } }
 }
 import { MIRROR } from "./skeleton.js"
+// (src must not be out: virtualPose passes its own copy of the list, and out's entries are
+// replaced, never changed in place, so src's quaternions can be read as they are)
 const mirrorD = (src, out) => {
-  const tmp = src.map((q) => ({ x: q.x, y: q.y, z: q.z, w: q.w }))
   for (let b = 0; b < NB; b++) {
-    const q = tmp[MIRROR[b]]
+    const q = src[MIRROR[b]]
     out[b] = { x: q.x, y: -q.y, z: -q.z, w: q.w }
   }
   return out

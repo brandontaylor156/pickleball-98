@@ -30,11 +30,11 @@ export const blocker = (cam, look, bodies, { near = CLEAR.near, ahead = CLEAR.ah
     const h = b.h ?? BODY.h
     const r = b.r ?? BODY.r
     if (hdist(cam, b) < near && cam.y < h + 0.6) return b
-    // sample the view line out to `ahead`
+    // sample the view line out to `ahead` (no object per sample: this runs twice a frame)
     for (let s = 0.25; s <= Math.min(ahead, len); s += 0.25) {
       const k = s / len
-      const p = { x: cam.x + dx * k, y: cam.y + dy * k, z: cam.z + dz * k }
-      if (p.y < h && p.y > 0 && hdist(p, b) < r) return b
+      const py = cam.y + dy * k
+      if (py < h && py > 0 && Math.hypot(cam.x + dx * k - b.x, cam.z + dz * k - b.z) < r) return b
     }
   }
   return null

@@ -50,7 +50,7 @@ export const Calibrate = ({ blob, snap = null, initial, players: initialPlayers 
   useEffect(() => {
     let live = true
     ;(snap ? snap() : grabFrame(blob, t))
-      .then((f) => live && setFrame(f))
+      .then((f) => live && (setFrame(f), setError(null)))
       .catch((e) => live && setError(e.message))
     return () => {
       live = false
@@ -65,7 +65,7 @@ export const Calibrate = ({ blob, snap = null, initial, players: initialPlayers 
   // draw the frame, the taps and (when calibrated) the court's lines
   useEffect(() => {
     const c = viewRef.current
-    if (!c || !frame) return
+    if (!c || !frame || !frame.canvas.width || !frame.canvas.height) return
     c.width = W
     c.height = H
     const g = c.getContext("2d")
@@ -98,7 +98,7 @@ export const Calibrate = ({ blob, snap = null, initial, players: initialPlayers 
   // the magnifier: the frame around the finger, 3x, with a crosshair
   useEffect(() => {
     const c = loupeRef.current
-    if (!c || !loupe || !frame) return
+    if (!c || !loupe || !frame || !frame.canvas.width || !frame.canvas.height) return
     c.width = LOUPE
     c.height = LOUPE
     const g = c.getContext("2d")
@@ -120,7 +120,7 @@ export const Calibrate = ({ blob, snap = null, initial, players: initialPlayers 
     const u = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))
     const v = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))
     const box = boxRef.current.getBoundingClientRect()
-    return { u, v, x: e.clientX - box.left, y: e.clientY - box.top, r }
+    return { u, v, x: e.clientX - box.left, y: e.clientY - box.top, w: box.width, r }
   }
   const onDown = (e) => {
     if (!frame) return
@@ -158,7 +158,7 @@ export const Calibrate = ({ blob, snap = null, initial, players: initialPlayers 
       <div className="pkTwinCalBox" ref={boxRef}>
         {error && <p className="pkMuted">{error}</p>}
         <canvas ref={viewRef} className="pkTwinCalView" data-touch-surface onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => ((drag.current = null), setLoupe(null))} aria-label="The video frame: tap the court's corners" />
-        {loupe && <canvas ref={loupeRef} className="pkTwinLoupe" style={{ left: Math.max(0, loupe.x - LOUPE / 2), top: Math.max(0, loupe.y - LOUPE - 36) }} aria-hidden="true" />}
+        {loupe && <canvas ref={loupeRef} className="pkTwinLoupe" style={{ left: Math.max(0, Math.min(loupe.w - LOUPE - 8, loupe.x - LOUPE / 2)), top: Math.max(0, loupe.y - LOUPE - 36) }} aria-hidden="true" />}
       </div>
       {frame && !snap && (
         <label className="pkTwinRow">

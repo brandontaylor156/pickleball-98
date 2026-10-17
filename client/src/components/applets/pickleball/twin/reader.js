@@ -54,11 +54,11 @@ export const openVideo = (blob) =>
         })
         await seekTo(v, 0)
       }
-      if (!Number.isFinite(v.duration) || v.duration <= 0) return reject(new Error("This video's length can't be read in this browser."))
+      if (!Number.isFinite(v.duration) || v.duration <= 0) return v.pause(), v.removeAttribute("src"), v.load(), v.remove(), URL.revokeObjectURL(url), reject(new Error("This video's length can't be read in this browser."))
       resolve({ video: v, url, close: () => (v.pause(), v.removeAttribute("src"), v.load(), v.remove(), URL.revokeObjectURL(url)) })
     }
     v.addEventListener("loadeddata", done)
-    v.addEventListener("error", () => (v.remove(), reject(new Error("This video can't be opened in this browser."))), { once: true })
+    v.addEventListener("error", () => (v.remove(), URL.revokeObjectURL(url), reject(new Error("This video can't be opened in this browser."))), { once: true })
     v.src = url
   })
 
@@ -90,6 +90,8 @@ export const frameStepper = (video, fps, from, end) => {
           if (done) return
           done = true
           clearTimeout(timer)
+          // (one listener per frame: a long video would pile up thousands of them)
+          video.removeEventListener("ended", onEnded)
           video.pause()
           resolve(v)
         }
@@ -100,7 +102,8 @@ export const frameStepper = (video, fps, from, end) => {
         }
         // (the last frames, or a stalled decoder: give up after a while)
         const timer = setTimeout(() => finish(video.ended ? null : video.currentTime), 4000)
-        video.addEventListener("ended", () => finish(null), { once: true })
+        const onEnded = () => finish(null)
+        video.addEventListener("ended", onEnded, { once: true })
         video.requestVideoFrameCallback(onFrame)
         video.play().catch(() => finish(null))
       })
@@ -196,16 +199,37 @@ export const startPose = async ({ model = "lite", players = 4, gpu = true, specs
       worker.postMessage({ type: "init", model, gpu, specs })
     })
     if (ready) {
+      // (the worker crashing mid-read, e.g. out of memory: every frame waiting on it fails,
+      // so the read stops with a reason instead of waiting forever)
+      let dead = null
+      const failAll = (err) => {
+        for (const p of pending.values()) p.reject(err)
+        pending.clear()
+      }
+      const crashed = (e) => {
+        dead = new Error(`The pose model stopped (${e?.message || "its worker crashed"}).`)
+        lastWorkerError = dead.message
+        failAll(dead)
+      }
+      worker.onerror = crashed
+      worker.onmessageerror = () => crashed({ message: "a frame couldn't be read" })
       return {
         where: "worker",
         delegate: ready.delegate,
         detect: (bitmap, ms, w, h, key = specs[0].key) =>
-          new Promise((resolve) => {
+          new Promise((resolve, reject) => {
+            if (dead) return bitmap.close?.(), reject(dead)
             const id = nextId++
-            pending.set(id, { resolve })
+            pending.set(id, { resolve, reject })
             worker.postMessage({ type: "frame", id, key, bitmap, ms, w, h }, [bitmap])
           }),
-        close: () => worker.terminate(),
+        // (Stop: whatever is waiting on the worker gives up now)
+        abort: (err = new Error("cancelled")) => failAll(err),
+        close: () => {
+          dead ||= new Error("closed")
+          failAll(dead)
+          worker.terminate()
+        },
       }
     }
     worker.terminate()
@@ -232,6 +256,7 @@ export const readGame = async (blob, { taps, players = 4, fps = READ_FPS, width 
   const { video, close } = await openVideo(blob)
   const sound = decodeSound(blob)
   let pose = null
+  let stopWatch = null
   try {
     const W = width
     const H = Math.round((width * video.videoHeight) / Math.max(1, video.videoWidth))
@@ -295,6 +320,8 @@ export const readGame = async (blob, { taps, players = 4, fps = READ_FPS, width 
       : null
     let ballMs = 0
     pose = await startPose({ model, players, gpu, specs, onStatus })
+    // (Stop works even while a frame is with the pose model)
+    stopWatch = setInterval(() => control.cancelled && pose?.abort?.(new Error("cancelled")), 200)
     onStatus?.(pose.delegate === "GPU" ? "Reading the video (graphics chip)..." : "Reading the video...")
     const end = Math.min(to ?? video.duration, video.duration, from + MAX_READ_SECONDS)
     const total = Math.max(0, end - from)
@@ -383,6 +410,7 @@ export const readGame = async (blob, { taps, players = 4, fps = READ_FPS, width 
     result.readStats = { frames: n, seconds: (performance.now() - started) / 1000, fps, width: W, where: pose.where, delegate: pose.delegate, switchedToCpu: switched, seekMsPerFrame: seekMs / Math.max(1, n), poseMsPerFrame: poseMs / Math.max(1, n), frameMode: frames.mode, ballMsPerFrame: ballMs / Math.max(1, n), inferencesPerFrame: inferences / Math.max(1, n), tiles: tiles.length, sound: !!audio, workerError: pose.where === "page" ? lastWorkerError : null }
     return result
   } finally {
+    clearInterval(stopWatch)
     pose?.close()
     close()
   }
@@ -393,6 +421,10 @@ export const grabFrame = async (blob, t = 1, width = 640) => {
   const { video, close } = await openVideo(blob)
   try {
     await seekTo(video, Math.min(t, Math.max(0, video.duration - 0.1)))
+    // (a phone's fresh recording can still be sizeless here: give it a moment, then say so rather
+    // than hand back a 0-pixel picture, which made the corner screen throw and blank the game)
+    if (!video.videoWidth || !video.videoHeight) await new Promise((r) => (video.addEventListener("loadeddata", r, { once: true }), setTimeout(r, 3000)))
+    if (!video.videoWidth || !video.videoHeight) throw new Error("Couldn't get a picture from this video. Try another moment, or film it again.")
     const c = document.createElement("canvas")
     c.width = width
     c.height = Math.round((width * video.videoHeight) / Math.max(1, video.videoWidth))

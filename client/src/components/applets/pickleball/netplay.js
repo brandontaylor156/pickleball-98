@@ -247,7 +247,10 @@ export const createGuest = ({ me, send, ...options }) => {
   m.mirror = true
   m.events.length = 0
   const mine = playerById(m, me)
-  let seq = 0
+  // (counted from the wall clock: a guest whose page reloaded mid-match, a phone that threw the
+  // tab away, comes back with higher numbers than before, or the host would take its inputs
+  // for old news and freeze its player)
+  let seq = Date.now()
   let lastInput = -1
   let clock = 0 // our ms clock (performance.now() from the engine)
   let offset = null // host seconds - our seconds, from the freshest snapshots
@@ -316,8 +319,10 @@ export const createGuest = ({ me, send, ...options }) => {
       lastSnapAt = nowMs
       // the clock: the least-delayed snapshots tell us the host's time best
       const sample = snap.t - nowMs / 1000
-      // (and it may drift down a little each time: the host can fall behind on a slow computer)
-      offset = offset === null ? sample : Math.max(sample, offset - 0.008)
+      // (and it may drift down a little each time: the host can fall behind on a slow computer).
+      // The host's clock stopped (paused while someone reconnects, or its tab was hidden): take
+      // its time as it is, or our copy would run seconds ahead of the host for a minute after
+      offset = offset === null || snap.paused || sample < offset - 1 ? sample : Math.max(sample, offset - 0.008)
       const ack = snap.ack?.[mine.seat]
       if (ack && sent.has(ack[0])) {
         const r = (nowMs - sent.get(ack[0])) / 1000

@@ -59,8 +59,15 @@ export const createLeisureSide = ({ layout, scene, quality = "medium", phone = f
   const pools = spots.filter((s) => s.kind === "swim")
   const tubs = spots.filter((s) => s.kind === "tub")
   let water = null
+  let gone = false
   // (the water only where there's a pool or a tub; made on first use: three.js import is async)
-  const waterReady = pools.length || tubs.length ? import("./water.js").then(({ createWater }) => (water = createWater(scene, { pools, tubs, quality }))) : Promise.resolve(null)
+  // (not after the park has gone; a failed import is just no water: swimRun copes with none)
+  const waterReady =
+    pools.length || tubs.length
+      ? import("./water.js")
+          .then(({ createWater }) => (gone ? null : (water = createWater(scene, { pools, tubs, quality }))))
+          .catch((e) => (console.warn("[park] water", e), null))
+      : Promise.resolve(null)
   const lightOf = (look) => ({ light: Math.max(0.55, Math.min(1, look?.ground ?? 1)), sunDir: look?.sun?.dir || null, sky: look?.sky?.[1] ?? null })
 
   // ---- Vince, by the drinks machine (only where there's a sourced one) ----
@@ -211,6 +218,7 @@ export const createLeisureSide = ({ layout, scene, quality = "medium", phone = f
       water.ripple(b.x, b.z, (b.speed || 0) > 0.25 ? 0.35 : 0.18)
     },
     dispose() {
+      gone = true
       water?.dispose()
       water = null
     },

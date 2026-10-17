@@ -145,3 +145,63 @@ test("slow computers (stuttering frames on both ends) don't cost anyone points",
   assert.ok(!hm.stats.faults["Two-bounce rule"], `two-bounce faults: ${hm.stats.faults["Two-bounce rule"]}`)
   assert.ok(!hm.stats.faults["Wrong receiver"] && !hm.stats.faults["Served from the wrong court"], JSON.stringify(hm.stats.faults))
 })
+
+test("after the host pauses (someone reconnecting) or its tab hides, the guest's clock follows the host's again at once", () => {
+  const people = [{ seat: 0, name: "Host" }, { seat: 1, name: "Guest" }]
+  const { roster } = onlineRoster(people, { doubles: false })
+  const settings = { doubles: false, scoring: "sideout", target: 11 }
+  const hm = createMatch({ ...settings, roster: roster.map((r) => (r.seat === 0 ? { ...r, ctrl: "human", slot: 0 } : r)), seed: 3 })
+  let now = 0
+  let guest = null
+  let paused = {}
+  const host = createHost(hm, { snap: (d) => guest.onSnap(JSON.parse(JSON.stringify(d)), now + 50), relay: () => {} })
+  guest = createGuest({ ...settings, roster, me: "p1", send: { input: () => {}, relay: () => {} } })
+  const run = (ms, { hostRuns = true, snaps = true } = {}) => {
+    for (let t = 0; t < ms; t += 16) {
+      now += 16
+      if (hostRuns && !hm.paused) advance(hm, 0.016)
+      host.setExtra(paused)
+      if (snaps) host.tick(16)
+      guest.tick(16, now)
+    }
+  }
+  run(3000)
+  // paused for 10 s (snapshots keep coming), then on again
+  hm.paused = true
+  paused = { paused: 1 }
+  run(10000)
+  hm.paused = false
+  paused = {}
+  run(500)
+  assert.ok(Math.abs(guest.m.t - hm.t) < 0.3, `after a pause: guest ${guest.m.t.toFixed(2)} s, host ${hm.t.toFixed(2)} s`)
+  // the host's tab hidden for 8 s (no frames, no snapshots), then back
+  run(8000, { hostRuns: false, snaps: false })
+  run(500)
+  assert.ok(Math.abs(guest.m.t - hm.t) < 0.3, `after a hidden tab: guest ${guest.m.t.toFixed(2)} s, host ${hm.t.toFixed(2)} s`)
+})
+
+test("a guest whose page reloaded mid-match (a new guest, same seat) moves its player on the host again", () => {
+  const people = [{ seat: 0, name: "Host" }, { seat: 1, name: "Guest" }]
+  const { roster } = onlineRoster(people, { doubles: false })
+  const settings = { doubles: false, scoring: "sideout", target: 11 }
+  const hm = createMatch({ ...settings, roster: roster.map((r) => (r.seat === 0 ? { ...r, ctrl: "human", slot: 0 } : r)), seed: 4 })
+  const host = createHost(hm, { snap: () => {}, relay: () => {} })
+  const join = () => createGuest({ ...settings, roster, me: "p1", send: { input: (d) => host.onInput(JSON.parse(JSON.stringify(d)), 1), relay: () => {} } })
+  const first = join()
+  for (let now = 0; now < 20000; now += 16) first.tick(16, now)
+  // (20 s later on the wall clock)
+  const realNow = Date.now
+  const later = realNow() + 20000
+  Date.now = () => later
+  let again
+  try {
+    again = join()
+  } finally {
+    Date.now = realNow
+  }
+  const stale = playerById(hm, "p1").x
+  again.me.x = stale + 1
+  for (let now = 0; now < 200; now += 16) again.tick(16, now)
+  assert.ok(Math.abs(playerById(hm, "p1").x - again.me.x) < 0.1, `host has ${playerById(hm, "p1").x}, the guest ${again.me.x}`)
+  assert.notEqual(playerById(hm, "p1").x, stale)
+})
