@@ -1,0 +1,12 @@
+# Render Blueprint: the Pickleball 98 server on Render's free plan (docs/deploy.md)
+services:
+  - type: web
+    name: pickleball-98-server
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: MONGODB_URI
+        sync: false # paste the Atlas connection string in Render's dashboard; never commit it
